@@ -7,7 +7,7 @@ from typing import Any, Literal, Protocol, cast
 from openai import AsyncOpenAI
 
 from desk_pet.agent.prompts import DESK_PET_INSTRUCTIONS
-from desk_pet.agent.tool_protocol import ModelTurn, ToolCall, ToolSchema
+from desk_pet.agent.tool_protocol import ModelTool, ModelTurn, ToolCall, ToolSchema, WebSearchTool
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,7 +49,7 @@ class _ResponsesAPI(Protocol):
         model: str,
         instructions: str,
         input: list[dict[str, Any]],
-        tools: list[ToolSchema],
+        tools: list[ModelTool],
         parallel_tool_calls: bool,
         reasoning: dict[str, str],
         max_output_tokens: int,
@@ -65,6 +65,8 @@ class OpenAIModelClient:
         reasoning_effort: str,
         request_timeout_seconds: float,
         maximum_output_tokens: int,
+        web_search_enabled: bool = False,
+        web_search_context_size: Literal["low", "medium", "high"] = "low",
         responses: _ResponsesAPI | None = None,
     ) -> None:
         if responses is None:
@@ -74,17 +76,28 @@ class OpenAIModelClient:
         self._model = model
         self._reasoning_effort = reasoning_effort
         self._maximum_output_tokens = maximum_output_tokens
+        self._web_search_enabled = web_search_enabled
+        self._web_search_context_size = web_search_context_size
 
     async def create_response(
         self,
         input_items: Sequence[dict[str, Any]],
         tools: Sequence[ToolSchema],
     ) -> ModelTurn:
+        model_tools: list[ModelTool] = list(tools)
+        if self._web_search_enabled:
+            model_tools.append(
+                WebSearchTool(
+                    type="web_search",
+                    search_context_size=self._web_search_context_size,
+                )
+            )
+
         response = await self._responses.create(
             model=self._model,
             instructions=DESK_PET_INSTRUCTIONS,
             input=list(input_items),
-            tools=list(tools),
+            tools=model_tools,
             parallel_tool_calls=False,
             reasoning={"effort": self._reasoning_effort},
             max_output_tokens=self._maximum_output_tokens,

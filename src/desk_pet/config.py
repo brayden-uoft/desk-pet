@@ -57,6 +57,8 @@ class AgentConfig:
     maximum_output_tokens: int
     history_limit: int
     maximum_tool_iterations: int
+    web_search_enabled: bool
+    web_search_context_size: Literal["low", "medium", "high"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +117,22 @@ def _positive_integer(mapping: dict[str, Any], key: str, section: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
         raise ConfigError(f"{section}.{key} must be a positive integer")
     return value
+
+
+def _required_boolean(mapping: dict[str, Any], key: str, section: str) -> bool:
+    value = mapping.get(key)
+    if not isinstance(value, bool):
+        raise ConfigError(f"{section}.{key} must be true or false")
+    return value
+
+
+def _web_search_context_size(
+    mapping: dict[str, Any],
+) -> Literal["low", "medium", "high"]:
+    value = mapping.get("web_search_context_size")
+    if value not in {"low", "medium", "high"}:
+        raise ConfigError("agent.web_search_context_size must be low, medium, or high")
+    return cast(Literal["low", "medium", "high"], value)
 
 
 def _device_selector(mapping: dict[str, Any], key: str, section: str) -> str | int | None:
@@ -220,6 +238,8 @@ def load_config(path: str | Path) -> AppConfig:
             maximum_output_tokens=_positive_integer(agent, "maximum_output_tokens", "agent"),
             history_limit=_positive_integer(agent, "history_limit", "agent"),
             maximum_tool_iterations=_positive_integer(agent, "maximum_tool_iterations", "agent"),
+            web_search_enabled=_required_boolean(agent, "web_search_enabled", "agent"),
+            web_search_context_size=_web_search_context_size(agent),
         ),
         storage=StorageConfig(
             database_path=Path(_required_string(storage, "database_path", "storage"))

@@ -8,6 +8,8 @@
 - Open the webcam only after an approved `capture_camera_image` tool request,
   read one frame, release it immediately, and keep the JPEG in memory.
 - Never expose unrestricted shell execution as an agent tool.
+- Use hosted, read-only web search for live public information; do not expose
+  arbitrary URL fetching or local browser control to the model.
 - Keep physical hardware access behind narrow interfaces.
 - Require explicit confirmation for externally consequential actions.
 - Bound every external call with timeouts and retry limits.
