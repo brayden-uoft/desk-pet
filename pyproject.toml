@@ -15,6 +15,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+desktop = [
+    "sounddevice>=0.5,<1",
+]
 dev = [
     "mypy>=1.10,<2",
     "pytest>=8.2,<9",

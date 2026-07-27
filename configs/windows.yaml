@@ -11,8 +11,16 @@ face:
 audio:
   input_driver: system_default
   output_driver: system_default
+  input_device: null
+  output_device: null
+  sample_rate_hz: 16000
+  block_duration_ms: 30
   silence_timeout_ms: 1200
   maximum_recording_seconds: 15
+  silence_threshold: 500
+  transcription_model: ${OPENAI_TRANSCRIPTION_MODEL:-gpt-4o-mini-transcribe}
+  speech_model: ${OPENAI_SPEECH_MODEL:-tts-1}
+  voice: ${OPENAI_SPEECH_VOICE:-nova}
 
 camera:
   driver: opencv
