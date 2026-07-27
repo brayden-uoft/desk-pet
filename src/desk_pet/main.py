@@ -17,11 +17,13 @@ from desk_pet.agent.loop import AgentLoop
 from desk_pet.agent.prompts import DESK_PET_INSTRUCTIONS
 from desk_pet.audio.errors import AudioCancelled, AudioError
 from desk_pet.audio.openai_services import OpenAISpeechSynthesizer, OpenAITranscriptionService
+from desk_pet.audio.thinking import ThinkingAudio, ThinkingAudioController
 from desk_pet.config import AppConfig, ConfigError, load_config
 from desk_pet.conversation import ConversationError, ConversationService
 from desk_pet.events import Event, EventBus, EventType
 from desk_pet.hardware.desktop.keyboard_trigger import KeyboardTrigger
 from desk_pet.hardware.desktop.opencv_camera import OpenCVCameraDevice
+from desk_pet.hardware.desktop.preview_face import DesktopPreviewFace
 from desk_pet.hardware.desktop.simulated_face import TerminalFace
 from desk_pet.hardware.desktop.sounddevice_audio import SoundDevicePlayer, SoundDeviceRecorder
 from desk_pet.hardware.interfaces import (
@@ -61,6 +63,7 @@ class DeskPetApplication:
         transcriber: TranscriptionService | None = None,
         synthesizer: SpeechSynthesizer | None = None,
         player: AudioPlayer | None = None,
+        thinking_audio: ThinkingAudio | None = None,
     ) -> None:
         self.events = events or EventBus()
         self.state = StateMachine(self.events)
@@ -74,6 +77,7 @@ class DeskPetApplication:
         self.transcriber = transcriber
         self.synthesizer = synthesizer
         self.player = player
+        self.thinking_audio = thinking_audio
         voice_components = (recorder, transcriber, synthesizer, player)
         if interaction_mode == "voice" and any(component is None for component in voice_components):
             raise ValueError("Voice mode requires recorder, transcriber, synthesizer, and player")
@@ -89,16 +93,24 @@ class DeskPetApplication:
             await self.state.transition_to(PetState.USING_TOOL)
 
     async def run(self) -> None:
-        if self.conversation is not None:
-            await self.conversation.initialize()
-        await self.state.transition_to(PetState.IDLE)
-        while True:
-            action = await self.trigger.wait_for_trigger()
-            await self.events.emit(Event.create(EventType.TRIGGER_RECEIVED, action=action))
-            if action == "exit":
-                return
-            if action in {"listen", "listen_start"}:
-                await self._handle_listen()
+        try:
+            if self.conversation is not None:
+                await self.conversation.initialize()
+            if self.thinking_audio is not None:
+                try:
+                    await self.thinking_audio.prepare()
+                except AudioError:
+                    LOGGER.warning("Thinking filler audio could not be prepared")
+            await self.state.transition_to(PetState.IDLE)
+            while True:
+                action = await self.trigger.wait_for_trigger()
+                await self.events.emit(Event.create(EventType.TRIGGER_RECEIVED, action=action))
+                if action == "exit":
+                    return
+                if action in {"listen", "listen_start"}:
+                    await self._handle_listen()
+        finally:
+            await self.face.close()
 
     async def _handle_listen(self) -> None:
         await self.state.transition_to(PetState.LISTENING)
@@ -109,6 +121,7 @@ class DeskPetApplication:
 
         user_text = await self._collect_user_text()
         if user_text is None:
+            await self._stop_thinking_audio()
             await self.state.transition_to(PetState.IDLE)
             return
         if not user_text:
@@ -116,6 +129,7 @@ class DeskPetApplication:
                 self.output("I didn't hear a question. Hold Space while speaking and try again.")
             else:
                 self.output("Type a message after pressing Space.")
+            await self._stop_thinking_audio()
             await self.state.transition_to(PetState.IDLE)
             return
 
@@ -124,23 +138,29 @@ class DeskPetApplication:
         try:
             assistant_text = await self.conversation.reply(user_text)
         except ConversationError as exc:
+            await self._stop_thinking_audio()
             await self.state.transition_to(PetState.ERROR)
-            self.output(f"Desk Pet> {exc}")
+            self.output(f"DeskBob> {exc}")
             await self.state.transition_to(PetState.IDLE)
             return
 
         await self.events.emit(Event.create(EventType.RESPONSE_READY, text=assistant_text))
-        await self.state.transition_to(PetState.SPEAKING)
-        self.output(f"Desk Pet> {assistant_text}")
         if self.interaction_mode == "voice":
             assert self.synthesizer is not None
             assert self.player is not None
             try:
                 speech = await self.synthesizer.synthesize(assistant_text)
+                await self._stop_thinking_audio()
+                await self.state.transition_to(PetState.SPEAKING)
+                self.output(f"DeskBob> {assistant_text}")
                 await self._run_cancellable(partial(self.player.play, speech))
             except AudioError as exc:
+                await self._stop_thinking_audio()
                 await self.state.transition_to(PetState.ERROR)
-                self.output(f"Desk Pet audio error> {exc}")
+                self.output(f"DeskBob audio error> {exc}")
+        else:
+            await self.state.transition_to(PetState.SPEAKING)
+            self.output(f"DeskBob> {assistant_text}")
         await self.state.transition_to(PetState.IDLE)
 
     async def _collect_user_text(self) -> str | None:
@@ -156,6 +176,8 @@ class DeskPetApplication:
             )
             if not completed or recording is None:
                 return None
+            if self.thinking_audio is not None:
+                await self.thinking_audio.start()
             await self.state.transition_to(PetState.TRANSCRIBING)
             transcript = (await self.transcriber.transcribe(recording)).strip()
             if transcript:
@@ -163,8 +185,12 @@ class DeskPetApplication:
             return transcript
         except AudioError as exc:
             await self.state.transition_to(PetState.ERROR)
-            self.output(f"Desk Pet audio error> {exc}")
+            self.output(f"DeskBob audio error> {exc}")
             return None
+
+    async def _stop_thinking_audio(self) -> None:
+        if self.thinking_audio is not None:
+            await self.thinking_audio.stop()
 
     async def _run_cancellable(
         self,
@@ -208,8 +234,8 @@ def build_application(
 ) -> DeskPetApplication:
     if config.trigger.driver != "keyboard":
         raise ConfigError(f"Unsupported Stage 1 trigger driver: {config.trigger.driver}")
-    if config.face.driver != "terminal":
-        raise ConfigError(f"Unsupported Stage 2 face driver: {config.face.driver}")
+    if config.face.driver not in {"terminal", "desktop_preview"}:
+        raise ConfigError(f"Unsupported desktop face driver: {config.face.driver}")
     if config.agent.provider != "openai":
         raise ConfigError(f"Unsupported model provider: {config.agent.provider}")
     api_key = os.getenv("OPENAI_API_KEY")
@@ -267,6 +293,7 @@ def build_application(
     transcriber: TranscriptionService | None = None
     synthesizer: SpeechSynthesizer | None = None
     player: AudioPlayer | None = None
+    thinking_audio: ThinkingAudio | None = None
     if interaction_mode == "voice":
         if config.profile != "windows":
             raise ConfigError("Stage 4 voice mode currently supports the Windows profile")
@@ -297,9 +324,18 @@ def build_application(
             request_timeout_seconds=config.agent.request_timeout_seconds,
         )
         player = SoundDevicePlayer(device=config.audio.output_device)
+        if config.audio.thinking_audio_enabled:
+            thinking_audio = ThinkingAudioController(
+                synthesizer=synthesizer,
+                player=player,
+                phrase=config.audio.thinking_phrase,
+            )
+    face: FaceDevice = (
+        DesktopPreviewFace() if config.face.driver == "desktop_preview" else TerminalFace()
+    )
     return DeskPetApplication(
         KeyboardTrigger(),
-        TerminalFace(),
+        face,
         conversation=conversation,
         events=events,
         interaction_mode=interaction_mode,
@@ -307,6 +343,7 @@ def build_application(
         transcriber=transcriber,
         synthesizer=synthesizer,
         player=player,
+        thinking_audio=thinking_audio,
     )
 
 

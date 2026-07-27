@@ -38,6 +38,8 @@ class AudioConfig:
     speech_model: str
     voice: str
     speech_speed: float
+    thinking_audio_enabled: bool
+    thinking_phrase: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -251,6 +253,12 @@ def load_config(path: str | Path) -> AppConfig:
                 minimum=0.25,
                 maximum=4.0,
             ),
+            thinking_audio_enabled=_required_boolean(
+                audio,
+                "thinking_audio_enabled",
+                "audio",
+            ),
+            thinking_phrase=_required_string(audio, "thinking_phrase", "audio"),
         ),
         camera=CameraConfig(
             driver=_required_string(camera, "driver", "camera"),

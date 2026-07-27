@@ -2,6 +2,7 @@ import asyncio
 from pathlib import Path
 
 from desk_pet.conversation import ConversationService
+from desk_pet.hardware.interfaces import CancellationToken
 from desk_pet.main import DeskPetApplication
 from desk_pet.memory.conversation_store import ConversationStore
 from tests.fakes.agent import FakeModelClient
@@ -12,6 +13,7 @@ from tests.fakes.hardware import (
     FakePlayer,
     FakeRecorder,
     FakeSynthesizer,
+    FakeThinkingAudio,
     FakeTranscriber,
     PushToTalkRecorder,
     QueueTrigger,
@@ -43,6 +45,7 @@ def test_voice_question_produces_spoken_response_without_hardware(tmp_path: Path
         transcriber = FakeTranscriber("Where do pandas live?")
         synthesizer = FakeSynthesizer()
         player = FakePlayer()
+        thinking_audio = FakeThinkingAudio()
         conversation = ConversationService(
             model=FakeModelClient(["Pandas live in China."]),
             store=ConversationStore(tmp_path / "desk_pet.db"),
@@ -59,6 +62,7 @@ def test_voice_question_produces_spoken_response_without_hardware(tmp_path: Path
             transcriber=transcriber,
             synthesizer=synthesizer,
             player=player,
+            thinking_audio=thinking_audio,
         )
 
         run_task = asyncio.create_task(app.run())
@@ -81,12 +85,83 @@ def test_voice_question_produces_spoken_response_without_hardware(tmp_path: Path
         assert transcriber.recordings == [b"fake-wav"]
         assert synthesizer.texts == ["Pandas live in China."]
         assert player.audio == [b"fake-speech-wav"]
+        assert thinking_audio.prepared
+        assert thinking_audio.start_count == 1
+        assert thinking_audio.stop_count == 1
         assert output == [
             "You> Where do pandas live?",
-            "Desk Pet> Pandas live in China.",
+            "DeskBob> Pandas live in China.",
         ]
         assert not list(tmp_path.glob("*.wav"))
         assert not list(tmp_path.glob("*.mp3"))
+
+    asyncio.run(scenario())
+
+
+def test_thinking_audio_does_not_block_response_work(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        events: list[str] = []
+        trigger = QueueTrigger()
+        face = FakeFace()
+        recorder = PushToTalkRecorder()
+
+        class OrderedThinkingAudio:
+            async def prepare(self) -> None:
+                events.append("prepare")
+
+            async def start(self) -> None:
+                events.append("filler_start")
+
+            async def stop(self) -> None:
+                events.append("filler_stop")
+
+        class OrderedTranscriber:
+            async def transcribe(self, audio: bytes) -> str:
+                events.append("transcribe")
+                return "Question"
+
+        class OrderedSynthesizer:
+            async def synthesize(self, text: str) -> bytes:
+                events.append("synthesize_answer")
+                return b"answer-wav"
+
+        class OrderedPlayer:
+            async def play(self, audio: bytes, cancellation: CancellationToken) -> None:
+                events.append("play_answer")
+
+        app = DeskPetApplication(
+            trigger,
+            face,
+            conversation=ConversationService(
+                model=FakeModelClient(["Answer"]),
+                store=ConversationStore(tmp_path / "ordered.db"),
+                history_limit=20,
+                request_timeout_seconds=1,
+            ),
+            interaction_mode="voice",
+            recorder=recorder,
+            transcriber=OrderedTranscriber(),
+            synthesizer=OrderedSynthesizer(),
+            player=OrderedPlayer(),
+            thinking_audio=OrderedThinkingAudio(),
+        )
+
+        run_task = asyncio.create_task(app.run())
+        await trigger.send("listen_start")
+        await recorder.started.wait()
+        await trigger.send("listen_stop")
+        await _wait_for_state_count(face, 6)
+        await trigger.send("exit")
+        await run_task
+
+        assert events == [
+            "prepare",
+            "filler_start",
+            "transcribe",
+            "synthesize_answer",
+            "filler_stop",
+            "play_answer",
+        ]
 
     asyncio.run(scenario())
 

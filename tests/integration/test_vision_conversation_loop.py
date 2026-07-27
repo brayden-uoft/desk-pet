@@ -129,7 +129,7 @@ def test_voice_vision_question_captures_one_image_and_speaks_answer(
         assert player.audio == [b"fake-speech-wav"]
         assert output == [
             "You> What am I holding?",
-            "Desk Pet> You're holding a red mug.",
+            "DeskBob> You're holding a red mug.",
         ]
         assert not list(tmp_path.glob("*.jpg"))
         assert not list(tmp_path.glob("*.jpeg"))

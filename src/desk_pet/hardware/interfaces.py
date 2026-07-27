@@ -35,6 +35,9 @@ class FaceDevice(Protocol):
     async def set_state(self, state: str) -> None:
         """Display the state or its animation."""
 
+    async def close(self) -> None:
+        """Release display resources."""
+
 
 class AudioRecorder(Protocol):
     async def record_utterance(self, cancellation: CancellationToken) -> bytes:

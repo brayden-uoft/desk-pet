@@ -121,3 +121,31 @@ after restarting the application.
 This stage provides approved identity continuity, not learned memory. Durable
 remember, inspect, correct, forget, and personality-evolution services remain
 separate later stages.
+
+## Desktop face preview
+
+The hardware-independent face model produces animated binary matrices with
+exactly 16 rows and 32 columns. A value is either on or off; the preview maps on
+to red and off to near-black. There is no RGB state in the model.
+
+The Windows adapter renders those frames in a dedicated Tk process while
+retaining terminal state output. Using a separate process keeps Tk on its own
+main thread and prevents the UI event loop from blocking asyncio, microphone
+capture, model calls, or playback. Closing the preview window does not stop
+DeskBob; exiting DeskBob closes the preview process.
+
+## Non-blocking thinking audio
+
+Voice mode synthesizes one short filler clip in memory during application
+startup. On push-to-talk release, playback starts before transcription and
+loops concurrently through transcription, model/tool work, and final-answer
+synthesis:
+
+```text
+Space up -> start filler -> transcribe -> model/tools -> synthesize answer
+         -> stop filler -> SPEAKING -> play answer
+```
+
+The final response pipeline never awaits completion of the filler phrase. It
+only signals cancellation before answer playback, bounded by the player's
+short audio block. The filler clip is not written to disk.

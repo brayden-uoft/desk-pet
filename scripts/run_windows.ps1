@@ -5,6 +5,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $env:PIP_DISABLE_PIP_VERSION_CHECK = "1"
+$env:PYTHONUTF8 = "1"
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $VenvPython = Join-Path $RepoRoot ".venv\Scripts\python.exe"

@@ -7,6 +7,8 @@
   override safety rules or tool permissions.
 - Keep microphone audio and synthesized speech in memory; delete any future
   diagnostic media in guaranteed cleanup blocks.
+- Keep preloaded thinking filler audio in memory and cancel it before final
+  answer playback.
 - Record only while Space is held and stop on release, hard timeout, or Escape.
 - Open the webcam only after an approved `capture_camera_image` tool request,
   read one frame, release it immediately, and keep the JPEG in memory.

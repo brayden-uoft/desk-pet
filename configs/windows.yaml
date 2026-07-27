@@ -6,7 +6,7 @@ trigger:
   cancel_key: escape
 
 face:
-  driver: terminal
+  driver: desktop_preview
 
 audio:
   input_driver: system_default
@@ -22,6 +22,8 @@ audio:
   speech_model: ${OPENAI_SPEECH_MODEL:-tts-1}
   voice: ${OPENAI_SPEECH_VOICE:-echo}
   speech_speed: 1.5
+  thinking_audio_enabled: true
+  thinking_phrase: "Uhh... umm... just thinking... got it... processing..."
 
 camera:
   driver: opencv
