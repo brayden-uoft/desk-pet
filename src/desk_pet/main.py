@@ -10,6 +10,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from desk_pet.agent.client import OpenAIModelClient
+from desk_pet.agent.loop import AgentLoop
 from desk_pet.config import AppConfig, ConfigError, load_config
 from desk_pet.conversation import ConversationError, ConversationService
 from desk_pet.events import Event, EventBus, EventType
@@ -17,6 +18,7 @@ from desk_pet.hardware.desktop.keyboard_trigger import KeyboardTrigger
 from desk_pet.hardware.desktop.simulated_face import TerminalFace
 from desk_pet.hardware.interfaces import FaceDevice, TriggerDevice
 from desk_pet.memory.conversation_store import ConversationStore
+from desk_pet.skills.defaults import create_default_skill_registry
 from desk_pet.state_machine import PetState, StateMachine
 
 LOGGER = logging.getLogger(__name__)
@@ -40,10 +42,15 @@ class DeskPetApplication:
         self.text_input = text_input
         self.output = output
         self.events.subscribe(self._display_state)
+        self.events.subscribe(self._handle_tool_request)
 
     async def _display_state(self, event: Event) -> None:
         if event.type is EventType.STATE_CHANGED:
             await self.face.set_state(str(event.payload["state"]))
+
+    async def _handle_tool_request(self, event: Event) -> None:
+        if event.type is EventType.TOOL_REQUESTED:
+            await self.state.transition_to(PetState.USING_TOOL)
 
     async def run(self) -> None:
         if self.conversation is not None:
@@ -97,11 +104,22 @@ def build_application(config: AppConfig) -> DeskPetApplication:
     if not api_key or api_key == "your-api-key-here":
         raise ConfigError("OPENAI_API_KEY is missing. Copy .env.example to .env and add your key.")
 
-    model = OpenAIModelClient(
+    response_model = OpenAIModelClient(
         model=config.agent.model,
         reasoning_effort=config.agent.reasoning_effort,
         request_timeout_seconds=config.agent.request_timeout_seconds,
         maximum_output_tokens=config.agent.maximum_output_tokens,
+    )
+    events = EventBus()
+
+    async def on_tool_requested(name: str) -> None:
+        await events.emit(Event.create(EventType.TOOL_REQUESTED, name=name))
+
+    model = AgentLoop(
+        model=response_model,
+        skills=create_default_skill_registry(),
+        maximum_tool_iterations=config.agent.maximum_tool_iterations,
+        on_tool_requested=on_tool_requested,
     )
     store = ConversationStore(config.storage.database_path)
     conversation = ConversationService(
@@ -114,6 +132,7 @@ def build_application(config: AppConfig) -> DeskPetApplication:
         KeyboardTrigger(),
         TerminalFace(),
         conversation=conversation,
+        events=events,
     )
 
 

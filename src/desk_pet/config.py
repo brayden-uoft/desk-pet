@@ -31,6 +31,7 @@ class AgentConfig:
     request_timeout_seconds: float
     maximum_output_tokens: int
     history_limit: int
+    maximum_tool_iterations: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,6 +122,7 @@ def load_config(path: str | Path) -> AppConfig:
             request_timeout_seconds=_positive_number(agent, "request_timeout_seconds", "agent"),
             maximum_output_tokens=_positive_integer(agent, "maximum_output_tokens", "agent"),
             history_limit=_positive_integer(agent, "history_limit", "agent"),
+            maximum_tool_iterations=_positive_integer(agent, "maximum_tool_iterations", "agent"),
         ),
         storage=StorageConfig(
             database_path=Path(_required_string(storage, "database_path", "storage"))
