@@ -207,6 +207,8 @@ def build_application(
         reasoning_effort=config.agent.reasoning_effort,
         request_timeout_seconds=config.agent.request_timeout_seconds,
         maximum_output_tokens=config.agent.maximum_output_tokens,
+        web_search_enabled=config.agent.web_search_enabled,
+        web_search_context_size=config.agent.web_search_context_size,
     )
     events = EventBus()
 

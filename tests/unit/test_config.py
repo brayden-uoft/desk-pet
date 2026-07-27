@@ -52,6 +52,8 @@ agent:
   maximum_output_tokens: 100
   history_limit: 5
   maximum_tool_iterations: 5
+  web_search_enabled: true
+  web_search_context_size: low
 storage:
   database_path: data/test.db
 """,
@@ -59,6 +61,18 @@ storage:
     )
 
     assert load_config(path).profile == "test"
+
+
+def test_invalid_web_search_configuration_is_rejected(tmp_path: Path) -> None:
+    text = Path("configs/windows.yaml").read_text(encoding="utf-8")
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        text.replace("web_search_context_size: low", "web_search_context_size: enormous"),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigError, match="web_search_context_size"):
+        load_config(path)
 
 
 def test_missing_required_value_is_rejected(tmp_path: Path) -> None:

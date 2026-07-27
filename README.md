@@ -4,7 +4,7 @@ A portable Python application for an AI desk pet. Development starts with
 deterministic laptop simulations; physical KICKPI K2B hardware will be added
 through replaceable adapters.
 
-## Stage 5: laptop voice and vision
+## Stage 6: laptop voice, vision, and live web search
 
 Requirements:
 
@@ -37,6 +37,12 @@ Ask a visual question such as `What am I holding?` to let the model request
 one webcam frame. The terminal enters `USING_TOOL`, OpenCV captures and
 JPEG-compresses exactly one frame, and the model's answer is spoken. The camera
 is not opened for ordinary questions and there is no continuous recording.
+
+Ask for current information such as `What's the weather in Toronto?` and the
+model can use OpenAI's hosted, read-only web search before answering. Search is
+enabled in `configs/windows.yaml`; `web_search_context_size` controls how much
+search context is used. This does not allow arbitrary local commands or expose
+a general-purpose URL-fetching tool.
 
 Typed input remains available:
 
@@ -84,7 +90,9 @@ tool calls, and stops after five tool iterations.
 3. Safe skill and tool loop
 4. Laptop audio
 5. Webcam vision
-6. K2B preparation and physical-driver integration
+6. Read-only hosted web search
+7. External connectors and approval-gated actions
+8. K2B preparation and physical-driver integration
 
 See [architecture](docs/architecture.md), [deployment](docs/deployment.md), and
 [safety](docs/safety.md) for design constraints.

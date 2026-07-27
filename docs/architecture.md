@@ -87,3 +87,15 @@ releases the device in a guaranteed cleanup block. It performs no background
 capture. The JPEG is represented as an in-memory data URL only for the current
 Responses API tool loop; SQLite stores the user and assistant text, not the
 image.
+
+## Stage 6 web search
+
+The OpenAI model client can attach the hosted `web_search` tool to Responses
+API requests. The model decides when current information needs a search and
+returns its final answer in the same response. This hosted tool is deliberately
+separate from the local skill registry: it cannot run shell commands, read
+local files, or fetch an arbitrary caller-supplied URL.
+
+Search can be disabled per deployment profile, and its context size is
+restricted to `low`, `medium`, or `high` by configuration validation. The
+existing five-iteration limit still governs local function tools.

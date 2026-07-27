@@ -41,6 +41,8 @@ agent:
   maximum_output_tokens: 500
   history_limit: 20
   maximum_tool_iterations: 5
+  web_search_enabled: true
+  web_search_context_size: low
 
 storage:
   database_path: data/desk_pet.db

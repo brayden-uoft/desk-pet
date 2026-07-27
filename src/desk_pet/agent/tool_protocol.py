@@ -12,6 +12,14 @@ class ToolSchema(TypedDict):
     parameters: dict[str, Any]
 
 
+class WebSearchTool(TypedDict):
+    type: Literal["web_search"]
+    search_context_size: Literal["low", "medium", "high"]
+
+
+ModelTool = ToolSchema | WebSearchTool
+
+
 class ToolOutputText(TypedDict):
     type: Literal["input_text"]
     text: str

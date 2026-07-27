@@ -2,7 +2,7 @@ import asyncio
 from typing import Any
 
 from desk_pet.agent.client import Message, OpenAIModelClient
-from desk_pet.agent.tool_protocol import ToolSchema
+from desk_pet.agent.tool_protocol import ModelTool, ToolSchema
 
 
 class FakeOutputItem:
@@ -37,7 +37,7 @@ class FakeResponsesAPI:
         model: str,
         instructions: str,
         input: list[dict[str, Any]],
-        tools: list[ToolSchema],
+        tools: list[ModelTool],
         parallel_tool_calls: bool,
         reasoning: dict[str, str],
         max_output_tokens: int,
@@ -101,3 +101,22 @@ def test_openai_client_preserves_function_calls_and_disables_parallel_tools() ->
     assert responses.arguments["parallel_tool_calls"] is False
     assert responses.arguments["store"] is False
     assert responses.arguments["tools"] == tools
+
+
+def test_openai_client_adds_hosted_web_search_when_enabled() -> None:
+    responses = FakeResponsesAPI()
+    client = OpenAIModelClient(
+        model="test-model",
+        reasoning_effort="low",
+        request_timeout_seconds=10,
+        maximum_output_tokens=250,
+        web_search_enabled=True,
+        web_search_context_size="medium",
+        responses=responses,
+    )
+
+    asyncio.run(client.create_response([{"role": "user", "content": "Toronto weather"}], []))
+
+    assert responses.arguments["tools"] == [
+        {"type": "web_search", "search_context_size": "medium"}
+    ]
