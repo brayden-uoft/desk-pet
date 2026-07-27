@@ -24,10 +24,27 @@ class FaceConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class AgentConfig:
+    provider: str
+    model: str
+    reasoning_effort: str
+    request_timeout_seconds: float
+    maximum_output_tokens: int
+    history_limit: int
+
+
+@dataclass(frozen=True, slots=True)
+class StorageConfig:
+    database_path: Path
+
+
+@dataclass(frozen=True, slots=True)
 class AppConfig:
     profile: str
     trigger: TriggerConfig
     face: FaceConfig
+    agent: AgentConfig
+    storage: StorageConfig
 
 
 class ConfigError(ValueError):
@@ -58,6 +75,20 @@ def _required_string(mapping: dict[str, Any], key: str, section: str) -> str:
     return value
 
 
+def _positive_number(mapping: dict[str, Any], key: str, section: str) -> float:
+    value = mapping.get(key)
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
+        raise ConfigError(f"{section}.{key} must be a positive number")
+    return float(value)
+
+
+def _positive_integer(mapping: dict[str, Any], key: str, section: str) -> int:
+    value = mapping.get(key)
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise ConfigError(f"{section}.{key} must be a positive integer")
+    return value
+
+
 def load_config(path: str | Path) -> AppConfig:
     config_path = Path(path)
     try:
@@ -73,6 +104,8 @@ def load_config(path: str | Path) -> AppConfig:
     root = _mapping(raw, "configuration")
     trigger = _mapping(root.get("trigger"), "trigger")
     face = _mapping(root.get("face"), "face")
+    agent = _mapping(root.get("agent"), "agent")
+    storage = _mapping(root.get("storage"), "storage")
     return AppConfig(
         profile=_required_string(root, "profile", "configuration"),
         trigger=TriggerConfig(
@@ -81,4 +114,15 @@ def load_config(path: str | Path) -> AppConfig:
             cancel_key=_required_string(trigger, "cancel_key", "trigger"),
         ),
         face=FaceConfig(driver=_required_string(face, "driver", "face")),
+        agent=AgentConfig(
+            provider=_required_string(agent, "provider", "agent"),
+            model=_required_string(agent, "model", "agent"),
+            reasoning_effort=_required_string(agent, "reasoning_effort", "agent"),
+            request_timeout_seconds=_positive_number(agent, "request_timeout_seconds", "agent"),
+            maximum_output_tokens=_positive_integer(agent, "maximum_output_tokens", "agent"),
+            history_limit=_positive_integer(agent, "history_limit", "agent"),
+        ),
+        storage=StorageConfig(
+            database_path=Path(_required_string(storage, "database_path", "storage"))
+        ),
     )

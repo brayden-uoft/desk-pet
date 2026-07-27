@@ -10,6 +10,8 @@ from typing import Any
 class EventType(StrEnum):
     STATE_CHANGED = "state_changed"
     TRIGGER_RECEIVED = "trigger_received"
+    TRANSCRIPT_READY = "transcript_ready"
+    RESPONSE_READY = "response_ready"
 
 
 @dataclass(frozen=True, slots=True)

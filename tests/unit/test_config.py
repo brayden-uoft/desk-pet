@@ -25,6 +25,15 @@ trigger:
   cancel_key: escape
 face:
   driver: terminal
+agent:
+  provider: openai
+  model: ${MODEL:-test-model}
+  reasoning_effort: low
+  request_timeout_seconds: 10
+  maximum_output_tokens: 100
+  history_limit: 5
+storage:
+  database_path: data/test.db
 """,
         encoding="utf-8",
     )
@@ -34,7 +43,10 @@ face:
 
 def test_missing_required_value_is_rejected(tmp_path: Path) -> None:
     path = tmp_path / "config.yaml"
-    path.write_text("profile: test\ntrigger: {}\nface: {}\n", encoding="utf-8")
+    path.write_text(
+        "profile: test\ntrigger: {}\nface: {}\nagent: {}\nstorage: {}\n",
+        encoding="utf-8",
+    )
 
     with pytest.raises(ConfigError, match="trigger.driver"):
         load_config(path)

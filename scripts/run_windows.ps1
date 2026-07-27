@@ -1,4 +1,5 @@
 $ErrorActionPreference = "Stop"
+$env:PIP_DISABLE_PIP_VERSION_CHECK = "1"
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $VenvPython = Join-Path $RepoRoot ".venv\Scripts\python.exe"
@@ -11,4 +12,3 @@ if (-not (Test-Path -LiteralPath $VenvPython)) {
 & $VenvPython -m pip install --quiet --editable $RepoRoot
 & $VenvPython -m desk_pet --config (Join-Path $RepoRoot "configs\windows.yaml")
 exit $LASTEXITCODE
-
