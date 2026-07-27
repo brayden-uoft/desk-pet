@@ -10,7 +10,7 @@ def test_loads_windows_configuration() -> None:
 
     assert config.profile == "windows"
     assert config.trigger.driver == "keyboard"
-    assert config.trigger.listen_key == "space"
+    assert config.trigger.listen_key == "right_alt"
     assert config.face.driver == "desktop_preview"
     assert config.audio.speech_speed == 1.5
     assert config.audio.thinking_audio_enabled

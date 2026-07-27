@@ -2,7 +2,7 @@ profile: windows
 
 trigger:
   driver: keyboard
-  listen_key: space
+  listen_key: right_alt
   cancel_key: escape
 
 face:

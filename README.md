@@ -29,9 +29,11 @@ notepad .env
 Replace `your-api-key-here` with an OpenAI API key. Never commit `.env`.
 
 The first launch creates `.venv` and installs the project. When the idle face
-appears, hold `Space` while speaking and release it to send. Transcription
-starts as soon as the key is released. The 15-second hard timeout remains as a
-safety limit. Press `Escape` to interrupt recording or playback.
+appears, hold the **right Alt key** while speaking and release it to send.
+Transcription starts as soon as the key is released. Right Alt is polled as a
+global Windows key, so the terminal can be minimized and another application
+can have focus. The 15-second hard timeout remains as a safety limit. Press
+`Escape` to interrupt recording or playback.
 Press `Escape` while idle to exit.
 
 The Windows profile opens a live DeskBob face window driven by the same state
@@ -43,7 +45,7 @@ starting the AI or using an API key:
 .\scripts\preview_face.ps1
 ```
 
-After Space is released, DeskBob immediately loops a preloaded “uhh... umm...
+After right Alt is released, DeskBob immediately loops a preloaded “uhh... umm...
 just thinking...” voice clip while transcription, model work, tools, and final
 speech synthesis continue concurrently. The filler stops immediately before
 the real answer plays, so it fills dead air without delaying the answer.

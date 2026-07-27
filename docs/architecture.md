@@ -56,7 +56,7 @@ requests and exposes no shell, filesystem, email, or calendar actions.
 
 ```text
 STARTING -> IDLE
-Space down -> LISTENING -> Space up -> TRANSCRIBING -> THINKING
+Right Alt down -> LISTENING -> Right Alt up -> TRANSCRIBING -> THINKING
       -> optional USING_TOOL -> SPEAKING -> IDLE
 Escape during LISTENING or SPEAKING -> cancel operation -> IDLE
 Escape while IDLE -> clean shutdown
@@ -68,14 +68,14 @@ tests replace all four without opening a physical device or contacting an API.
 The application transfers WAV bytes in memory instead of persisting temporary
 media.
 
-Windows voice mode polls the physical Space key state. A down edge starts the
+Windows voice mode globally polls the physical right Alt key state. A down edge starts the
 microphone and an up edge requests a graceful stop, preserving the captured
 audio for transcription. Escape uses the separate cancellation signal and
 discards the active recording.
 
 The keyboard adapter polls for keys asynchronously. This lets cancellation
 stop waiting cleanly without leaving a blocked background thread that could
-consume a later Space or Escape press.
+consume a later right Alt or Escape press.
 
 ## Stage 5 vision flow
 
@@ -142,7 +142,7 @@ loops concurrently through transcription, model/tool work, and final-answer
 synthesis:
 
 ```text
-Space up -> start filler -> transcribe -> model/tools -> synthesize answer
+Right Alt up -> start filler -> transcribe -> model/tools -> synthesize answer
          -> stop filler -> SPEAKING -> play answer
 ```
 

@@ -126,9 +126,11 @@ class DeskPetApplication:
             return
         if not user_text:
             if self.interaction_mode == "voice":
-                self.output("I didn't hear a question. Hold Space while speaking and try again.")
+                self.output(
+                    "I didn't hear a question. Hold the push-to-talk key while speaking."
+                )
             else:
-                self.output("Type a message after pressing Space.")
+                self.output("Type a message after pressing the input key.")
             await self._stop_thinking_audio()
             await self.state.transition_to(PetState.IDLE)
             return
@@ -334,7 +336,10 @@ def build_application(
         DesktopPreviewFace() if config.face.driver == "desktop_preview" else TerminalFace()
     )
     return DeskPetApplication(
-        KeyboardTrigger(),
+        KeyboardTrigger(
+            listen_key=config.trigger.listen_key,
+            cancel_key=config.trigger.cancel_key,
+        ),
         face,
         conversation=conversation,
         events=events,
@@ -371,14 +376,18 @@ async def async_main(argv: Sequence[str] | None = None) -> int:
         config = load_config(args.config)
         mode: InteractionMode = args.mode
         app = build_application(config, interaction_mode=mode)
-        print(f"Desk Pet Stage 5 ({config.profile}, {config.agent.model}, {mode})")
+        print(f"DeskBob ({config.profile}, {config.agent.model}, {mode})")
+        listen_key_label = config.trigger.listen_key.replace("_", " ").title()
         if mode == "voice":
             print(
-                "Hold Space while speaking, then release it to send. "
+                f"Hold {listen_key_label} while speaking, then release it to send. "
                 "Press Escape to cancel recording/playback or exit while idle."
             )
         else:
-            print("Tap Space, type a message, and press Enter. Press Escape while idle to exit.")
+            print(
+                f"Tap {listen_key_label}, type a message, and press Enter. "
+                "Press Escape while idle to exit."
+            )
         await app.run()
         print("Desk Pet stopped cleanly.")
         return 0
