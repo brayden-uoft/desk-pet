@@ -45,6 +45,17 @@ enabled in `configs/windows.yaml`; `web_search_context_size` controls how much
 search context is used. This does not allow arbitrary local commands or expose
 a general-purpose URL-fetching tool.
 
+DeskBob's approved personality lives in `configs/persona.md`. A private,
+approved user profile can live at `data/private/user-profile.md`; the entire
+`data/` directory is excluded from Git, so personal context is never pushed to
+the public repository. Both documents require `status: approved` in YAML front
+matter before they are loaded. Draft or missing user profiles are ignored.
+Restart DeskBob after editing either context document.
+
+Windows voice output uses the `echo` voice at `1.5x` speed by default. Override
+the voice with `OPENAI_SPEECH_VOICE` or edit `audio.speech_speed` in
+`configs/windows.yaml`.
+
 Typed input remains available:
 
 ```powershell
@@ -92,8 +103,10 @@ tool calls, and stops after five tool iterations.
 4. Laptop audio
 5. Webcam vision
 6. Read-only hosted web search
-7. External connectors and approval-gated actions
-8. K2B preparation and physical-driver integration
+7. Approved private profile and DeskBob personality
+8. Durable memory and evolving personality
+9. External connectors and approval-gated actions
+10. K2B preparation and physical-driver integration
 
 See [architecture](docs/architecture.md), [deployment](docs/deployment.md), and
 [safety](docs/safety.md) for design constraints.

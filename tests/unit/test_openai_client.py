@@ -120,3 +120,19 @@ def test_openai_client_adds_hosted_web_search_when_enabled() -> None:
     assert responses.arguments["tools"] == [
         {"type": "web_search", "search_context_size": "medium"}
     ]
+
+
+def test_openai_client_uses_supplied_runtime_instructions() -> None:
+    responses = FakeResponsesAPI()
+    client = OpenAIModelClient(
+        model="test-model",
+        reasoning_effort="low",
+        request_timeout_seconds=10,
+        maximum_output_tokens=250,
+        instructions="DeskBob runtime context",
+        responses=responses,
+    )
+
+    asyncio.run(client.create_response([{"role": "user", "content": "Hello"}], []))
+
+    assert responses.arguments["instructions"] == "DeskBob runtime context"

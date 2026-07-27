@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 
 from desk_pet.agent.client import OpenAIModelClient
 from desk_pet.agent.loop import AgentLoop
+from desk_pet.agent.prompts import DESK_PET_INSTRUCTIONS
 from desk_pet.audio.errors import AudioCancelled, AudioError
 from desk_pet.audio.openai_services import OpenAISpeechSynthesizer, OpenAITranscriptionService
 from desk_pet.config import AppConfig, ConfigError, load_config
@@ -31,6 +32,11 @@ from desk_pet.hardware.interfaces import (
     SpeechSynthesizer,
     TranscriptionService,
     TriggerDevice,
+)
+from desk_pet.memory.context import (
+    ContextDocumentError,
+    build_context_instructions,
+    load_runtime_context,
 )
 from desk_pet.memory.conversation_store import ConversationStore
 from desk_pet.skills.defaults import create_default_skill_registry
@@ -210,6 +216,16 @@ def build_application(
     if not api_key or api_key == "your-api-key-here":
         raise ConfigError("OPENAI_API_KEY is missing. Copy .env.example to .env and add your key.")
 
+    try:
+        runtime_context = load_runtime_context(
+            persona_path=config.context.persona_path,
+            user_profile_path=config.context.user_profile_path,
+            maximum_characters=config.context.maximum_characters,
+        )
+    except ContextDocumentError as exc:
+        raise ConfigError(str(exc)) from exc
+    instructions = DESK_PET_INSTRUCTIONS + build_context_instructions(runtime_context)
+
     response_model = OpenAIModelClient(
         model=config.agent.model,
         reasoning_effort=config.agent.reasoning_effort,
@@ -217,6 +233,7 @@ def build_application(
         maximum_output_tokens=config.agent.maximum_output_tokens,
         web_search_enabled=config.agent.web_search_enabled,
         web_search_context_size=config.agent.web_search_context_size,
+        instructions=instructions,
     )
     events = EventBus()
 
@@ -276,6 +293,7 @@ def build_application(
         synthesizer = OpenAISpeechSynthesizer(
             model=config.audio.speech_model,
             voice=config.audio.voice,
+            speed=config.audio.speech_speed,
             request_timeout_seconds=config.agent.request_timeout_seconds,
         )
         player = SoundDevicePlayer(device=config.audio.output_device)

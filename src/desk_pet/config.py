@@ -37,6 +37,7 @@ class AudioConfig:
     transcription_model: str
     speech_model: str
     voice: str
+    speech_speed: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +68,13 @@ class StorageConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ContextConfig:
+    persona_path: Path
+    user_profile_path: Path
+    maximum_characters: int
+
+
+@dataclass(frozen=True, slots=True)
 class AppConfig:
     profile: str
     trigger: TriggerConfig
@@ -74,6 +82,7 @@ class AppConfig:
     audio: AudioConfig
     camera: CameraConfig
     agent: AgentConfig
+    context: ContextConfig
     storage: StorageConfig
 
 
@@ -165,6 +174,24 @@ def _bounded_integer(
     return value
 
 
+def _bounded_number(
+    mapping: dict[str, Any],
+    key: str,
+    section: str,
+    *,
+    minimum: float,
+    maximum: float,
+) -> float:
+    value = mapping.get(key)
+    if (
+        not isinstance(value, (int, float))
+        or isinstance(value, bool)
+        or not minimum <= value <= maximum
+    ):
+        raise ConfigError(f"{section}.{key} must be a number from {minimum} to {maximum}")
+    return float(value)
+
+
 def _image_detail(mapping: dict[str, Any]) -> Literal["low", "high", "auto"]:
     value = mapping.get("image_detail")
     if value not in {"low", "high", "auto"}:
@@ -190,6 +217,7 @@ def load_config(path: str | Path) -> AppConfig:
     audio = _mapping(root.get("audio"), "audio")
     camera = _mapping(root.get("camera"), "camera")
     agent = _mapping(root.get("agent"), "agent")
+    context = _mapping(root.get("context"), "context")
     storage = _mapping(root.get("storage"), "storage")
     return AppConfig(
         profile=_required_string(root, "profile", "configuration"),
@@ -216,6 +244,13 @@ def load_config(path: str | Path) -> AppConfig:
             transcription_model=_required_string(audio, "transcription_model", "audio"),
             speech_model=_required_string(audio, "speech_model", "audio"),
             voice=_required_string(audio, "voice", "audio"),
+            speech_speed=_bounded_number(
+                audio,
+                "speech_speed",
+                "audio",
+                minimum=0.25,
+                maximum=4.0,
+            ),
         ),
         camera=CameraConfig(
             driver=_required_string(camera, "driver", "camera"),
@@ -240,6 +275,17 @@ def load_config(path: str | Path) -> AppConfig:
             maximum_tool_iterations=_positive_integer(agent, "maximum_tool_iterations", "agent"),
             web_search_enabled=_required_boolean(agent, "web_search_enabled", "agent"),
             web_search_context_size=_web_search_context_size(agent),
+        ),
+        context=ContextConfig(
+            persona_path=Path(_required_string(context, "persona_path", "context")),
+            user_profile_path=Path(
+                _required_string(context, "user_profile_path", "context")
+            ),
+            maximum_characters=_positive_integer(
+                context,
+                "maximum_characters",
+                "context",
+            ),
         ),
         storage=StorageConfig(
             database_path=Path(_required_string(storage, "database_path", "storage"))

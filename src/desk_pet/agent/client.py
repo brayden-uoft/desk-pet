@@ -67,6 +67,7 @@ class OpenAIModelClient:
         maximum_output_tokens: int,
         web_search_enabled: bool = False,
         web_search_context_size: Literal["low", "medium", "high"] = "low",
+        instructions: str = DESK_PET_INSTRUCTIONS,
         responses: _ResponsesAPI | None = None,
     ) -> None:
         if responses is None:
@@ -78,6 +79,7 @@ class OpenAIModelClient:
         self._maximum_output_tokens = maximum_output_tokens
         self._web_search_enabled = web_search_enabled
         self._web_search_context_size = web_search_context_size
+        self._instructions = instructions
 
     async def create_response(
         self,
@@ -95,7 +97,7 @@ class OpenAIModelClient:
 
         response = await self._responses.create(
             model=self._model,
-            instructions=DESK_PET_INSTRUCTIONS,
+            instructions=self._instructions,
             input=list(input_items),
             tools=model_tools,
             parallel_tool_calls=False,

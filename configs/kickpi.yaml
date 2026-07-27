@@ -24,7 +24,8 @@ audio:
   silence_threshold: 500
   transcription_model: ${OPENAI_TRANSCRIPTION_MODEL:-gpt-4o-mini-transcribe}
   speech_model: ${OPENAI_SPEECH_MODEL:-tts-1}
-  voice: ${OPENAI_SPEECH_VOICE:-nova}
+  voice: ${OPENAI_SPEECH_VOICE:-echo}
+  speech_speed: 1.5
 
 camera:
   driver: opencv
@@ -43,6 +44,11 @@ agent:
   maximum_tool_iterations: 5
   web_search_enabled: true
   web_search_context_size: low
+
+context:
+  persona_path: configs/persona.md
+  user_profile_path: data/private/user-profile.md
+  maximum_characters: 20000
 
 storage:
   database_path: data/desk_pet.db
