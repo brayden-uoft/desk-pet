@@ -4,7 +4,7 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 import yaml
 
@@ -40,6 +40,15 @@ class AudioConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class CameraConfig:
+    driver: str
+    index: int
+    maximum_dimension: int
+    jpeg_quality: int
+    image_detail: Literal["low", "high", "auto"]
+
+
+@dataclass(frozen=True, slots=True)
 class AgentConfig:
     provider: str
     model: str
@@ -61,6 +70,7 @@ class AppConfig:
     trigger: TriggerConfig
     face: FaceConfig
     audio: AudioConfig
+    camera: CameraConfig
     agent: AgentConfig
     storage: StorageConfig
 
@@ -116,6 +126,34 @@ def _device_selector(mapping: dict[str, Any], key: str, section: str) -> str | i
     raise ConfigError(f"{section}.{key} must be null, a device name, or a non-negative index")
 
 
+def _non_negative_integer(mapping: dict[str, Any], key: str, section: str) -> int:
+    value = mapping.get(key)
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ConfigError(f"{section}.{key} must be a non-negative integer")
+    return value
+
+
+def _bounded_integer(
+    mapping: dict[str, Any],
+    key: str,
+    section: str,
+    *,
+    minimum: int,
+    maximum: int,
+) -> int:
+    value = mapping.get(key)
+    if not isinstance(value, int) or isinstance(value, bool) or not minimum <= value <= maximum:
+        raise ConfigError(f"{section}.{key} must be an integer from {minimum} to {maximum}")
+    return value
+
+
+def _image_detail(mapping: dict[str, Any]) -> Literal["low", "high", "auto"]:
+    value = mapping.get("image_detail")
+    if value not in {"low", "high", "auto"}:
+        raise ConfigError("camera.image_detail must be low, high, or auto")
+    return cast(Literal["low", "high", "auto"], value)
+
+
 def load_config(path: str | Path) -> AppConfig:
     config_path = Path(path)
     try:
@@ -132,6 +170,7 @@ def load_config(path: str | Path) -> AppConfig:
     trigger = _mapping(root.get("trigger"), "trigger")
     face = _mapping(root.get("face"), "face")
     audio = _mapping(root.get("audio"), "audio")
+    camera = _mapping(root.get("camera"), "camera")
     agent = _mapping(root.get("agent"), "agent")
     storage = _mapping(root.get("storage"), "storage")
     return AppConfig(
@@ -159,6 +198,19 @@ def load_config(path: str | Path) -> AppConfig:
             transcription_model=_required_string(audio, "transcription_model", "audio"),
             speech_model=_required_string(audio, "speech_model", "audio"),
             voice=_required_string(audio, "voice", "audio"),
+        ),
+        camera=CameraConfig(
+            driver=_required_string(camera, "driver", "camera"),
+            index=_non_negative_integer(camera, "index", "camera"),
+            maximum_dimension=_positive_integer(camera, "maximum_dimension", "camera"),
+            jpeg_quality=_bounded_integer(
+                camera,
+                "jpeg_quality",
+                "camera",
+                minimum=1,
+                maximum=100,
+            ),
+            image_detail=_image_detail(camera),
         ),
         agent=AgentConfig(
             provider=_required_string(agent, "provider", "agent"),

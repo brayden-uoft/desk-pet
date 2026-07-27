@@ -20,6 +20,7 @@ from desk_pet.config import AppConfig, ConfigError, load_config
 from desk_pet.conversation import ConversationError, ConversationService
 from desk_pet.events import Event, EventBus, EventType
 from desk_pet.hardware.desktop.keyboard_trigger import KeyboardTrigger
+from desk_pet.hardware.desktop.opencv_camera import OpenCVCameraDevice
 from desk_pet.hardware.desktop.simulated_face import TerminalFace
 from desk_pet.hardware.desktop.sounddevice_audio import SoundDevicePlayer, SoundDeviceRecorder
 from desk_pet.hardware.interfaces import (
@@ -212,9 +213,19 @@ def build_application(
     async def on_tool_requested(name: str) -> None:
         await events.emit(Event.create(EventType.TOOL_REQUESTED, name=name))
 
+    if config.camera.driver != "opencv":
+        raise ConfigError(f"Unsupported camera driver: {config.camera.driver}")
+    camera = OpenCVCameraDevice(
+        index=config.camera.index,
+        maximum_dimension=config.camera.maximum_dimension,
+        jpeg_quality=config.camera.jpeg_quality,
+    )
     model = AgentLoop(
         model=response_model,
-        skills=create_default_skill_registry(),
+        skills=create_default_skill_registry(
+            camera=camera,
+            image_detail=config.camera.image_detail,
+        ),
         maximum_tool_iterations=config.agent.maximum_tool_iterations,
         on_tool_requested=on_tool_requested,
     )
@@ -295,7 +306,7 @@ async def async_main(argv: Sequence[str] | None = None) -> int:
         config = load_config(args.config)
         mode: InteractionMode = args.mode
         app = build_application(config, interaction_mode=mode)
-        print(f"Desk Pet Stage 4 ({config.profile}, {config.agent.model}, {mode})")
+        print(f"Desk Pet Stage 5 ({config.profile}, {config.agent.model}, {mode})")
         if mode == "voice":
             print(
                 "Tap Space and speak. Recording stops after silence. "
