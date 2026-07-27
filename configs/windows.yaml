@@ -1,0 +1,34 @@
+profile: windows
+
+trigger:
+  driver: keyboard
+  listen_key: space
+  cancel_key: escape
+
+face:
+  driver: terminal
+
+audio:
+  input_driver: system_default
+  output_driver: system_default
+  silence_timeout_ms: 1200
+  maximum_recording_seconds: 15
+
+camera:
+  driver: opencv
+  index: 0
+
+agent:
+  provider: openai
+  model: ${OPENAI_MODEL:-gpt-5-mini}
+
+storage:
+  database_path: data/desk_pet.db
+
+security:
+  require_confirmation:
+    - send_email
+    - modify_calendar
+    - delete_file
+    - run_command
+

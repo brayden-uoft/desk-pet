@@ -1,0 +1,38 @@
+profile: kickpi
+
+trigger:
+  driver: bluetooth_keyboard
+  listen_key: f13
+  cancel_key: escape
+
+face:
+  driver: max7219
+  spi_bus: 0
+  spi_device: 0
+  matrix_count: 8
+  brightness: 2
+
+audio:
+  input_driver: alsa
+  output_driver: alsa
+  silence_timeout_ms: 1200
+  maximum_recording_seconds: 15
+
+camera:
+  driver: v4l2
+  device: /dev/video0
+
+agent:
+  provider: openai
+  model: ${OPENAI_MODEL:-gpt-5-mini}
+
+storage:
+  database_path: data/desk_pet.db
+
+security:
+  require_confirmation:
+    - send_email
+    - modify_calendar
+    - delete_file
+    - run_command
+

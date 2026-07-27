@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "desk-pet"
+version = "0.1.0"
+description = "Portable AI desk pet with simulated and physical hardware adapters"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "PyYAML>=6.0.2,<7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.10,<2",
+    "pytest>=8.2,<9",
+    "ruff>=0.5,<1",
+    "types-PyYAML>=6.0.12,<7",
+]
+
+[project.scripts]
+desk-pet = "desk_pet.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/desk_pet"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src", "tests"]
