@@ -104,3 +104,20 @@ local files, or fetch an arbitrary caller-supplied URL.
 Search can be disabled per deployment profile, and its context size is
 restricted to `low`, `medium`, or `high` by configuration validation. The
 existing five-iteration limit still governs local function tools.
+
+## Stage 7A approved runtime context
+
+DeskBob's public-safe persona and Brayden's private profile are separate
+Markdown documents with YAML front matter. Only documents explicitly marked
+`status: approved` are loaded. The persona is required; the private profile is
+optional so a clean clone still starts without personal data.
+
+The private profile lives below the git-ignored `data/` directory. At startup,
+both approved documents are read under a combined character limit and encoded
+as JSON context inside the model instructions. Context is personalization
+data—it cannot override safety rules or tool permissions. Edits take effect
+after restarting the application.
+
+This stage provides approved identity continuity, not learned memory. Durable
+remember, inspect, correct, forget, and personality-evolution services remain
+separate later stages.

@@ -27,6 +27,7 @@ class _SpeechAPI(Protocol):
         voice: str,
         input: str,
         response_format: str,
+        speed: float,
     ) -> _SpeechResponse: ...
 
 
@@ -61,6 +62,7 @@ class OpenAISpeechSynthesizer:
         *,
         model: str,
         voice: str,
+        speed: float,
         request_timeout_seconds: float,
         speech: _SpeechAPI | None = None,
     ) -> None:
@@ -70,6 +72,7 @@ class OpenAISpeechSynthesizer:
         self._speech = speech
         self._model = model
         self._voice = voice
+        self._speed = speed
 
     async def synthesize(self, text: str) -> bytes:
         try:
@@ -78,6 +81,7 @@ class OpenAISpeechSynthesizer:
                 voice=self._voice,
                 input=text,
                 response_format="wav",
+                speed=self._speed,
             )
             return await response.aread()
         except Exception as exc:

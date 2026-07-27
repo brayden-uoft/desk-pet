@@ -38,6 +38,7 @@ audio:
   transcription_model: test-transcription
   speech_model: test-speech
   voice: test-voice
+  speech_speed: 1.5
 camera:
   driver: opencv
   index: 0
@@ -54,6 +55,10 @@ agent:
   maximum_tool_iterations: 5
   web_search_enabled: true
   web_search_context_size: low
+context:
+  persona_path: configs/persona.md
+  user_profile_path: data/private/user-profile.md
+  maximum_characters: 20000
 storage:
   database_path: data/test.db
 """,
@@ -78,7 +83,10 @@ def test_invalid_web_search_configuration_is_rejected(tmp_path: Path) -> None:
 def test_missing_required_value_is_rejected(tmp_path: Path) -> None:
     path = tmp_path / "config.yaml"
     path.write_text(
-        ("profile: test\ntrigger: {}\nface: {}\naudio: {}\ncamera: {}\nagent: {}\nstorage: {}\n"),
+        (
+            "profile: test\ntrigger: {}\nface: {}\naudio: {}\ncamera: {}\n"
+            "agent: {}\ncontext: {}\nstorage: {}\n"
+        ),
         encoding="utf-8",
     )
 

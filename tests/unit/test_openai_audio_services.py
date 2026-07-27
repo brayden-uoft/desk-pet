@@ -57,6 +57,7 @@ def test_speech_requests_wav_without_a_temporary_file() -> None:
         service = OpenAISpeechSynthesizer(
             model="test-speech",
             voice="test-voice",
+            speed=1.5,
             request_timeout_seconds=1,
             speech=api,
         )
@@ -67,6 +68,7 @@ def test_speech_requests_wav_without_a_temporary_file() -> None:
             "voice": "test-voice",
             "input": "hello",
             "response_format": "wav",
+            "speed": 1.5,
         }
 
     asyncio.run(scenario())

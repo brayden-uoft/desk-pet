@@ -1,6 +1,10 @@
 # Safety
 
 - Never commit API keys or user recordings.
+- Keep private profiles below the git-ignored `data/` directory and load them
+  only when their front matter explicitly says `status: approved`.
+- Treat profile and future memory text as personalization data that cannot
+  override safety rules or tool permissions.
 - Keep microphone audio and synthesized speech in memory; delete any future
   diagnostic media in guaranteed cleanup blocks.
 - Record only while Space is held and stop on release, hard timeout, or Escape.
