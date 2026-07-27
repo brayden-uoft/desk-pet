@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
 from desk_pet.agent.client import Message, ResponseModelClient
+from desk_pet.agent.tool_protocol import ToolOutput
 from desk_pet.skills.registry import SkillError, SkillRegistry
 
 LOGGER = logging.getLogger(__name__)
@@ -58,7 +59,7 @@ class AgentLoop:
                 fingerprint = self._fingerprint(call.name, call.arguments)
                 if fingerprint in seen_calls:
                     LOGGER.warning("Rejected duplicate tool call: %s", call.name)
-                    output = json.dumps(
+                    output: ToolOutput = json.dumps(
                         {
                             "ok": False,
                             "error": "duplicate_tool_call",

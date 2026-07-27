@@ -5,6 +5,8 @@
   diagnostic media in guaranteed cleanup blocks.
 - Record only after an explicit Space press and stop on silence, timeout, or
   Escape.
+- Open the webcam only after an approved `capture_camera_image` tool request,
+  read one frame, release it immediately, and keep the JPEG in memory.
 - Never expose unrestricted shell execution as an agent tool.
 - Keep physical hardware access behind narrow interfaces.
 - Require explicit confirmation for externally consequential actions.

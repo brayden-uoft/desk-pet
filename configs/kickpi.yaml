@@ -27,8 +27,11 @@ audio:
   voice: ${OPENAI_SPEECH_VOICE:-nova}
 
 camera:
-  driver: v4l2
-  device: /dev/video0
+  driver: opencv
+  index: 0
+  maximum_dimension: 1024
+  jpeg_quality: 80
+  image_detail: auto
 
 agent:
   provider: openai

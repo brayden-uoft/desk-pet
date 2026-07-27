@@ -4,13 +4,14 @@ A portable Python application for an AI desk pet. Development starts with
 deterministic laptop simulations; physical KICKPI K2B hardware will be added
 through replaceable adapters.
 
-## Stage 4: laptop voice
+## Stage 5: laptop voice and vision
 
 Requirements:
 
 - Windows 10 or 11
 - Python 3.11 or newer
 - A microphone and speakers or headphones
+- A webcam
 
 Launch in voice mode from PowerShell:
 
@@ -32,6 +33,11 @@ appears, tap `Space` and speak. Recording stops after 1.2 seconds of silence or
 the 15-second hard timeout. Press `Escape` to interrupt recording or playback.
 Press `Escape` while idle to exit.
 
+Ask a visual question such as `What am I holding?` to let the model request
+one webcam frame. The terminal enters `USING_TOOL`, OpenCV captures and
+JPEG-compresses exactly one frame, and the model's answer is spoken. The camera
+is not opened for ordinary questions and there is no continuous recording.
+
 Typed input remains available:
 
 ```powershell
@@ -46,6 +52,7 @@ To inspect the Windows audio devices and the current defaults:
 
 Set `audio.input_device` or `audio.output_device` in `configs/windows.yaml` to
 an index from that list when the system default is not the device you want.
+Set `camera.index` in the same file if the intended webcam is not index `0`.
 
 Run the validation suite:
 
@@ -55,16 +62,17 @@ Run the validation suite:
 
 Conversation turns are stored in `data/desk_pet.db`. Tests use fake model,
 recording, transcription, speech, and playback services. They never make
-network calls and require no physical audio devices.
+network calls and require no physical audio or camera devices.
 
 Audio is passed between components as in-memory WAV bytes. The normal voice
-path does not create temporary recordings or speech files.
+path does not create temporary recordings or speech files. Camera frames are
+passed as in-memory JPEG data and are not saved to disk.
 
 Stage 3 exposes exactly three approved tools:
 
 - `get_current_time`
 - `start_timer`
-- `capture_camera_image` (an intentional stub until Stage 5)
+- `capture_camera_image`
 
 The tool loop validates arguments, rejects duplicate calls, disables parallel
 tool calls, and stops after five tool iterations.

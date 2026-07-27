@@ -15,6 +15,9 @@ List available microphone and playback devices:
 .\.venv\Scripts\python.exe -m sounddevice
 ```
 
+The default camera is OpenCV index `0`. Change `camera.index` in
+`configs/windows.yaml` if a different webcam should be used.
+
 ## KICKPI K2B
 
 K2B deployment begins only after the laptop interaction loop is stable. The

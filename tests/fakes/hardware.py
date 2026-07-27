@@ -100,3 +100,13 @@ class CancellablePlayer:
             await asyncio.sleep(0)
         self.cancelled = True
         raise AudioCancelled("Playback cancelled.")
+
+
+class FakeCamera:
+    def __init__(self, jpeg: bytes = b"\xff\xd8fake-jpeg\xff\xd9") -> None:
+        self.jpeg = jpeg
+        self.calls = 0
+
+    async def capture_jpeg(self) -> bytes:
+        self.calls += 1
+        return self.jpeg
