@@ -1,4 +1,5 @@
 $ErrorActionPreference = "Stop"
+$env:PIP_DISABLE_PIP_VERSION_CHECK = "1"
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $VenvPython = Join-Path $RepoRoot ".venv\Scripts\python.exe"
@@ -17,4 +18,3 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $VenvPython -m pytest
 exit $LASTEXITCODE
-

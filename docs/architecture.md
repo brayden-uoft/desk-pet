@@ -20,14 +20,15 @@ packages under `hardware/`.
 Every state transition emits a `STATE_CHANGED` event. Future conversation,
 tool, and response events use the same event model.
 
-## Stage 1 flow
+## Stage 2 flow
 
 ```text
 STARTING -> IDLE
-Space -> LISTENING -> IDLE
+Space -> LISTENING -> typed input -> THINKING -> SPEAKING -> IDLE
 Escape -> clean shutdown
 ```
 
-The temporary return from `LISTENING` to `IDLE` is a seam for Stage 2 and Stage
-4. It proves input and display wiring without pretending audio exists.
-
+The application builds model input from recent SQLite conversation turns and
+the new user message. The model client uses the OpenAI Responses API with
+remote response storage disabled because SQLite is the local source of truth.
+Audio will replace only the typed-input boundary in a later stage.

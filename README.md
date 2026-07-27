@@ -4,7 +4,7 @@ A portable Python application for an AI desk pet. Development starts with
 deterministic laptop simulations; physical KICKPI K2B hardware will be added
 through replaceable adapters.
 
-## Stage 1: laptop simulator
+## Stage 2: text conversation
 
 Requirements:
 
@@ -17,8 +17,18 @@ Launch from PowerShell:
 .\scripts\run_windows.ps1
 ```
 
+Create your local environment file once:
+
+```powershell
+Copy-Item .env.example .env
+notepad .env
+```
+
+Replace `your-api-key-here` with an OpenAI API key. Never commit `.env`.
+
 The first launch creates `.venv` and installs the project. When the idle face
-appears, press `Space` to simulate a listening cycle. Press `Escape` to exit.
+appears, tap `Space`, type a message, and press `Enter`. Tap `Space` again for
+the next turn. Press `Escape` while idle to exit.
 
 Run the validation suite:
 
@@ -26,7 +36,8 @@ Run the validation suite:
 .\scripts\test.ps1
 ```
 
-Stage 1 intentionally has no AI, audio, camera, or external API calls.
+Conversation turns are stored in `data/desk_pet.db`. Tests use a fake model and
+never make network calls.
 
 ## Development stages
 
@@ -39,4 +50,3 @@ Stage 1 intentionally has no AI, audio, camera, or external API calls.
 
 See [architecture](docs/architecture.md), [deployment](docs/deployment.md), and
 [safety](docs/safety.md) for design constraints.
-
