@@ -32,6 +32,7 @@ agent:
   request_timeout_seconds: 10
   maximum_output_tokens: 100
   history_limit: 5
+  maximum_tool_iterations: 5
 storage:
   database_path: data/test.db
 """,

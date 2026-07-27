@@ -25,6 +25,7 @@ agent:
   request_timeout_seconds: 45
   maximum_output_tokens: 500
   history_limit: 20
+  maximum_tool_iterations: 5
 
 storage:
   database_path: data/desk_pet.db

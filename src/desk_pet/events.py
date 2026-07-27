@@ -11,6 +11,7 @@ class EventType(StrEnum):
     STATE_CHANGED = "state_changed"
     TRIGGER_RECEIVED = "trigger_received"
     TRANSCRIPT_READY = "transcript_ready"
+    TOOL_REQUESTED = "tool_requested"
     RESPONSE_READY = "response_ready"
 
 

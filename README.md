@@ -4,7 +4,7 @@ A portable Python application for an AI desk pet. Development starts with
 deterministic laptop simulations; physical KICKPI K2B hardware will be added
 through replaceable adapters.
 
-## Stage 2: text conversation
+## Stage 3: approved skills
 
 Requirements:
 
@@ -38,6 +38,15 @@ Run the validation suite:
 
 Conversation turns are stored in `data/desk_pet.db`. Tests use a fake model and
 never make network calls.
+
+Stage 3 exposes exactly three approved tools:
+
+- `get_current_time`
+- `start_timer`
+- `capture_camera_image` (an intentional stub until Stage 5)
+
+The tool loop validates arguments, rejects duplicate calls, disables parallel
+tool calls, and stops after five tool iterations.
 
 ## Development stages
 
