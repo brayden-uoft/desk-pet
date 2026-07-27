@@ -65,6 +65,35 @@ def test_capture_always_stops_at_hard_timeout_without_speech() -> None:
     assert reads == 3
 
 
+def test_push_to_talk_ignores_silence_until_stop_is_requested() -> None:
+    cancellation = CancellationToken()
+    blocks = iter([_pcm(1000), _pcm(0), _pcm(0), _pcm(0)])
+    reads = 0
+
+    def read_block(frames: int) -> bytes:
+        nonlocal reads
+        reads += 1
+        block = next(blocks)
+        if reads == 4:
+            cancellation.request_stop()
+        return block
+
+    audio = capture_wav(
+        read_block,
+        cancellation=cancellation,
+        sample_rate_hz=40,
+        block_duration_ms=100,
+        silence_timeout_ms=200,
+        maximum_recording_seconds=1,
+        silence_threshold=500,
+        stop_on_silence=False,
+    )
+
+    assert reads == 4
+    with wave.open(BytesIO(audio), "rb") as wav_file:
+        assert wav_file.getnframes() == 16
+
+
 def test_capture_rejects_cancelled_recording() -> None:
     cancellation = CancellationToken()
     cancellation.cancel()

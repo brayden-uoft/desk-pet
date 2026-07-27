@@ -56,7 +56,7 @@ requests and exposes no shell, filesystem, email, or calendar actions.
 
 ```text
 STARTING -> IDLE
-Space -> LISTENING -> TRANSCRIBING -> THINKING
+Space down -> LISTENING -> Space up -> TRANSCRIBING -> THINKING
       -> optional USING_TOOL -> SPEAKING -> IDLE
 Escape during LISTENING or SPEAKING -> cancel operation -> IDLE
 Escape while IDLE -> clean shutdown
@@ -67,6 +67,11 @@ transcription, speech synthesis, and playback are separate interfaces, so
 tests replace all four without opening a physical device or contacting an API.
 The application transfers WAV bytes in memory instead of persisting temporary
 media.
+
+Windows voice mode polls the physical Space key state. A down edge starts the
+microphone and an up edge requests a graceful stop, preserving the captured
+audio for transcription. Escape uses the separate cancellation signal and
+discards the active recording.
 
 The keyboard adapter polls for keys asynchronously. This lets cancellation
 stop waiting cleanly without leaving a blocked background thread that could

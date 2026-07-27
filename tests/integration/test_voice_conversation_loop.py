@@ -13,6 +13,7 @@ from tests.fakes.hardware import (
     FakeRecorder,
     FakeSynthesizer,
     FakeTranscriber,
+    PushToTalkRecorder,
     QueueTrigger,
 )
 
@@ -38,7 +39,7 @@ def test_voice_question_produces_spoken_response_without_hardware(tmp_path: Path
         trigger = QueueTrigger()
         face = FakeFace()
         output: list[str] = []
-        recorder = FakeRecorder()
+        recorder = PushToTalkRecorder()
         transcriber = FakeTranscriber("Where do pandas live?")
         synthesizer = FakeSynthesizer()
         player = FakePlayer()
@@ -61,7 +62,9 @@ def test_voice_question_produces_spoken_response_without_hardware(tmp_path: Path
         )
 
         run_task = asyncio.create_task(app.run())
-        await trigger.send("listen")
+        await trigger.send("listen_start")
+        await recorder.started.wait()
+        await trigger.send("listen_stop")
         await _wait_for_state_count(face, 6)
         await trigger.send("exit")
         await run_task
@@ -74,7 +77,7 @@ def test_voice_question_produces_spoken_response_without_hardware(tmp_path: Path
             "speaking",
             "idle",
         ]
-        assert recorder.calls == 1
+        assert recorder.stopped
         assert transcriber.recordings == [b"fake-wav"]
         assert synthesizer.texts == ["Pandas live in China."]
         assert player.audio == [b"fake-speech-wav"]

@@ -29,8 +29,9 @@ notepad .env
 Replace `your-api-key-here` with an OpenAI API key. Never commit `.env`.
 
 The first launch creates `.venv` and installs the project. When the idle face
-appears, tap `Space` and speak. Recording stops after 1.2 seconds of silence or
-the 15-second hard timeout. Press `Escape` to interrupt recording or playback.
+appears, hold `Space` while speaking and release it to send. Transcription
+starts as soon as the key is released. The 15-second hard timeout remains as a
+safety limit. Press `Escape` to interrupt recording or playback.
 Press `Escape` while idle to exit.
 
 Ask a visual question such as `What am I holding?` to let the model request

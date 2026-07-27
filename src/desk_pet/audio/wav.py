@@ -36,8 +36,9 @@ def capture_wav(
     silence_timeout_ms: int,
     maximum_recording_seconds: float,
     silence_threshold: float,
+    stop_on_silence: bool = True,
 ) -> bytes:
-    """Capture blocks until post-speech silence or the hard recording limit."""
+    """Capture blocks until requested stop, optional silence, or the hard limit."""
     frames_per_block = max(1, sample_rate_hz * block_duration_ms // 1000)
     maximum_blocks = max(
         1,
@@ -51,12 +52,14 @@ def capture_wav(
     for _ in range(maximum_blocks):
         if cancellation.cancelled:
             raise AudioCancelled("Recording cancelled.")
+        if cancellation.stop_requested:
+            break
         block = read_block(frames_per_block)
         blocks.append(block)
         if pcm_rms(block) >= silence_threshold:
             heard_speech = True
             silent_blocks = 0
-        elif heard_speech:
+        elif heard_speech and stop_on_silence:
             silent_blocks += 1
             if silent_blocks >= silence_blocks_required:
                 break
