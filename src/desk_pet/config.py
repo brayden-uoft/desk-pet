@@ -24,6 +24,22 @@ class FaceConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class AudioConfig:
+    input_driver: str
+    output_driver: str
+    input_device: str | int | None
+    output_device: str | int | None
+    sample_rate_hz: int
+    block_duration_ms: int
+    silence_timeout_ms: int
+    maximum_recording_seconds: float
+    silence_threshold: float
+    transcription_model: str
+    speech_model: str
+    voice: str
+
+
+@dataclass(frozen=True, slots=True)
 class AgentConfig:
     provider: str
     model: str
@@ -44,6 +60,7 @@ class AppConfig:
     profile: str
     trigger: TriggerConfig
     face: FaceConfig
+    audio: AudioConfig
     agent: AgentConfig
     storage: StorageConfig
 
@@ -90,6 +107,15 @@ def _positive_integer(mapping: dict[str, Any], key: str, section: str) -> int:
     return value
 
 
+def _device_selector(mapping: dict[str, Any], key: str, section: str) -> str | int | None:
+    value = mapping.get(key)
+    if value is None or isinstance(value, str):
+        return value
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    raise ConfigError(f"{section}.{key} must be null, a device name, or a non-negative index")
+
+
 def load_config(path: str | Path) -> AppConfig:
     config_path = Path(path)
     try:
@@ -105,6 +131,7 @@ def load_config(path: str | Path) -> AppConfig:
     root = _mapping(raw, "configuration")
     trigger = _mapping(root.get("trigger"), "trigger")
     face = _mapping(root.get("face"), "face")
+    audio = _mapping(root.get("audio"), "audio")
     agent = _mapping(root.get("agent"), "agent")
     storage = _mapping(root.get("storage"), "storage")
     return AppConfig(
@@ -115,6 +142,24 @@ def load_config(path: str | Path) -> AppConfig:
             cancel_key=_required_string(trigger, "cancel_key", "trigger"),
         ),
         face=FaceConfig(driver=_required_string(face, "driver", "face")),
+        audio=AudioConfig(
+            input_driver=_required_string(audio, "input_driver", "audio"),
+            output_driver=_required_string(audio, "output_driver", "audio"),
+            input_device=_device_selector(audio, "input_device", "audio"),
+            output_device=_device_selector(audio, "output_device", "audio"),
+            sample_rate_hz=_positive_integer(audio, "sample_rate_hz", "audio"),
+            block_duration_ms=_positive_integer(audio, "block_duration_ms", "audio"),
+            silence_timeout_ms=_positive_integer(audio, "silence_timeout_ms", "audio"),
+            maximum_recording_seconds=_positive_number(
+                audio,
+                "maximum_recording_seconds",
+                "audio",
+            ),
+            silence_threshold=_positive_number(audio, "silence_threshold", "audio"),
+            transcription_model=_required_string(audio, "transcription_model", "audio"),
+            speech_model=_required_string(audio, "speech_model", "audio"),
+            voice=_required_string(audio, "voice", "audio"),
+        ),
         agent=AgentConfig(
             provider=_required_string(agent, "provider", "agent"),
             model=_required_string(agent, "model", "agent"),

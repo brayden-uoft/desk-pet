@@ -25,6 +25,19 @@ trigger:
   cancel_key: escape
 face:
   driver: terminal
+audio:
+  input_driver: system_default
+  output_driver: system_default
+  input_device: null
+  output_device: null
+  sample_rate_hz: 16000
+  block_duration_ms: 30
+  silence_timeout_ms: 1200
+  maximum_recording_seconds: 15
+  silence_threshold: 500
+  transcription_model: test-transcription
+  speech_model: test-speech
+  voice: test-voice
 agent:
   provider: openai
   model: ${MODEL:-test-model}
@@ -45,7 +58,7 @@ storage:
 def test_missing_required_value_is_rejected(tmp_path: Path) -> None:
     path = tmp_path / "config.yaml"
     path.write_text(
-        "profile: test\ntrigger: {}\nface: {}\nagent: {}\nstorage: {}\n",
+        "profile: test\ntrigger: {}\nface: {}\naudio: {}\nagent: {}\nstorage: {}\n",
         encoding="utf-8",
     )
 

@@ -9,7 +9,7 @@ if (-not (Test-Path -LiteralPath $VenvPython)) {
     python -m venv (Join-Path $RepoRoot ".venv")
 }
 
-& $VenvPython -m pip install --quiet --editable "$RepoRoot[dev]"
+& $VenvPython -m pip install --quiet --editable "$RepoRoot[dev,desktop]"
 & $VenvPython -m ruff check $RepoRoot
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $VenvPython -m ruff format --check $RepoRoot

@@ -9,6 +9,8 @@ Application
        +-- TriggerDevice
        +-- FaceDevice
        +-- AudioRecorder
+       +-- TranscriptionService
+       +-- SpeechSynthesizer
        +-- AudioPlayer
        +-- CameraDevice
 ```
@@ -48,3 +50,23 @@ model response
 
 Parallel tool calls are disabled. The loop executes no more than five tool
 requests and exposes no shell, filesystem, email, or calendar actions.
+
+## Stage 4 voice flow
+
+```text
+STARTING -> IDLE
+Space -> LISTENING -> TRANSCRIBING -> THINKING
+      -> optional USING_TOOL -> SPEAKING -> IDLE
+Escape during LISTENING or SPEAKING -> cancel operation -> IDLE
+Escape while IDLE -> clean shutdown
+```
+
+Windows recording and playback use `sounddevice` adapters. Recording,
+transcription, speech synthesis, and playback are separate interfaces, so
+tests replace all four without opening a physical device or contacting an API.
+The application transfers WAV bytes in memory instead of persisting temporary
+media.
+
+The keyboard adapter polls for keys asynchronously. This lets cancellation
+stop waiting cleanly without leaving a blocked background thread that could
+consume a later Space or Escape press.
