@@ -33,8 +33,9 @@ appears, hold the **right Alt key** while speaking and release it to send.
 Transcription starts as soon as the key is released. Right Alt is polled as a
 global Windows key, so the terminal can be minimized and another application
 can have focus. The 15-second hard timeout remains as a safety limit. Press
-`Escape` to interrupt recording or playback.
-Press `Escape` while idle to exit.
+`Escape` to interrupt recording or playback. When DeskBob is idle, global
+Escape presses are ignored so another application cannot accidentally shut him
+down. Press `Ctrl+C` in PowerShell or close the terminal window to exit.
 
 The Windows profile opens a live DeskBob face window driven by the same state
 events as the eventual hardware. It is exactly 32 pixels wide by 16 pixels

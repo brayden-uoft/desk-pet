@@ -71,7 +71,9 @@ media.
 Windows voice mode globally polls the physical right Alt key state. A down edge starts the
 microphone and an up edge requests a graceful stop, preserving the captured
 audio for transcription. Escape uses the separate cancellation signal and
-discards the active recording.
+discards active recording or playback. Idle Escape presses are ignored in the
+packaged Windows application so background use is not interrupted; Ctrl+C or
+closing the terminal shuts it down.
 
 The keyboard adapter polls for keys asynchronously. This lets cancellation
 stop waiting cleanly without leaving a blocked background thread that could

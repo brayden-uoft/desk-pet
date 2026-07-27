@@ -64,6 +64,7 @@ class DeskPetApplication:
         synthesizer: SpeechSynthesizer | None = None,
         player: AudioPlayer | None = None,
         thinking_audio: ThinkingAudio | None = None,
+        exit_on_idle_cancel: bool = True,
     ) -> None:
         self.events = events or EventBus()
         self.state = StateMachine(self.events)
@@ -78,6 +79,7 @@ class DeskPetApplication:
         self.synthesizer = synthesizer
         self.player = player
         self.thinking_audio = thinking_audio
+        self.exit_on_idle_cancel = exit_on_idle_cancel
         voice_components = (recorder, transcriber, synthesizer, player)
         if interaction_mode == "voice" and any(component is None for component in voice_components):
             raise ValueError("Voice mode requires recorder, transcriber, synthesizer, and player")
@@ -105,7 +107,7 @@ class DeskPetApplication:
             while True:
                 action = await self.trigger.wait_for_trigger()
                 await self.events.emit(Event.create(EventType.TRIGGER_RECEIVED, action=action))
-                if action == "exit":
+                if action == "shutdown" or (action == "exit" and self.exit_on_idle_cancel):
                     return
                 if action in {"listen", "listen_start"}:
                     await self._handle_listen()
@@ -349,6 +351,7 @@ def build_application(
         synthesizer=synthesizer,
         player=player,
         thinking_audio=thinking_audio,
+        exit_on_idle_cancel=False,
     )
 
 
@@ -381,12 +384,12 @@ async def async_main(argv: Sequence[str] | None = None) -> int:
         if mode == "voice":
             print(
                 f"Hold {listen_key_label} while speaking, then release it to send. "
-                "Press Escape to cancel recording/playback or exit while idle."
+                "Escape cancels active audio. Press Ctrl+C or close this window to exit."
             )
         else:
             print(
                 f"Tap {listen_key_label}, type a message, and press Enter. "
-                "Press Escape while idle to exit."
+                "Press Ctrl+C or close this window to exit."
             )
         await app.run()
         print("Desk Pet stopped cleanly.")
