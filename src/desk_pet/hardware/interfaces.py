@@ -5,17 +5,25 @@ from typing import Protocol
 
 
 class CancellationToken:
-    """Thread-safe cancellation signal shared with blocking device adapters."""
+    """Thread-safe stop and cancellation signals for blocking device adapters."""
 
     def __init__(self) -> None:
         self._event = threading.Event()
+        self._stop_event = threading.Event()
 
     def cancel(self) -> None:
         self._event.set()
 
+    def request_stop(self) -> None:
+        self._stop_event.set()
+
     @property
     def cancelled(self) -> bool:
         return self._event.is_set()
+
+    @property
+    def stop_requested(self) -> bool:
+        return self._stop_event.is_set()
 
 
 class TriggerDevice(Protocol):

@@ -91,7 +91,7 @@ class DeskPetApplication:
             await self.events.emit(Event.create(EventType.TRIGGER_RECEIVED, action=action))
             if action == "exit":
                 return
-            if action == "listen":
+            if action in {"listen", "listen_start"}:
                 await self._handle_listen()
 
     async def _handle_listen(self) -> None:
@@ -107,7 +107,7 @@ class DeskPetApplication:
             return
         if not user_text:
             if self.interaction_mode == "voice":
-                self.output("I didn't hear a question. Please tap Space and try again.")
+                self.output("I didn't hear a question. Hold Space while speaking and try again.")
             else:
                 self.output("Type a message after pressing Space.")
             await self.state.transition_to(PetState.IDLE)
@@ -144,7 +144,10 @@ class DeskPetApplication:
         assert self.recorder is not None
         assert self.transcriber is not None
         try:
-            completed, recording = await self._run_cancellable(self.recorder.record_utterance)
+            completed, recording = await self._run_cancellable(
+                self.recorder.record_utterance,
+                stop_action="listen_stop",
+            )
             if not completed or recording is None:
                 return None
             await self.state.transition_to(PetState.TRANSCRIBING)
@@ -160,6 +163,8 @@ class DeskPetApplication:
     async def _run_cancellable(
         self,
         operation: Callable[[CancellationToken], Awaitable[T]],
+        *,
+        stop_action: str | None = None,
     ) -> tuple[bool, T | None]:
         cancellation = CancellationToken()
         operation_task: asyncio.Future[T] = asyncio.ensure_future(operation(cancellation))
@@ -185,6 +190,9 @@ class DeskPetApplication:
                 with suppress(AudioCancelled):
                     await operation_task
                 return False, None
+            if action == stop_action:
+                cancellation.request_stop()
+                return True, await operation_task
 
 
 def build_application(
@@ -311,7 +319,7 @@ async def async_main(argv: Sequence[str] | None = None) -> int:
         print(f"Desk Pet Stage 5 ({config.profile}, {config.agent.model}, {mode})")
         if mode == "voice":
             print(
-                "Tap Space and speak. Recording stops after silence. "
+                "Hold Space while speaking, then release it to send. "
                 "Press Escape to cancel recording/playback or exit while idle."
             )
         else:

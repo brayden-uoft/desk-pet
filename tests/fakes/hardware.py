@@ -47,6 +47,22 @@ class FakeRecorder:
         return self.audio
 
 
+class PushToTalkRecorder:
+    def __init__(self, audio: bytes = b"fake-wav") -> None:
+        self.audio = audio
+        self.started = asyncio.Event()
+        self.stopped = False
+
+    async def record_utterance(self, cancellation: CancellationToken) -> bytes:
+        self.started.set()
+        while not cancellation.stop_requested:
+            if cancellation.cancelled:
+                raise AudioCancelled("Recording cancelled.")
+            await asyncio.sleep(0)
+        self.stopped = True
+        return self.audio
+
+
 class CancellableRecorder:
     def __init__(self) -> None:
         self.started = asyncio.Event()

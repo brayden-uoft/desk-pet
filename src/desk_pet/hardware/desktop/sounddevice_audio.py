@@ -67,6 +67,7 @@ class SoundDeviceRecorder:
                     silence_timeout_ms=self._silence_timeout_ms,
                     maximum_recording_seconds=self._maximum_recording_seconds,
                     silence_threshold=self._silence_threshold,
+                    stop_on_silence=False,
                 )
         except AudioError:
             raise
