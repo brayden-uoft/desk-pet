@@ -23,3 +23,6 @@ class TerminalFace:
     async def set_state(self, state: str) -> None:
         face = _FACES.get(state, _FACES["error"])
         self._output(f"[{state.upper():>21}]  {face}")
+
+    async def close(self) -> None:
+        return None

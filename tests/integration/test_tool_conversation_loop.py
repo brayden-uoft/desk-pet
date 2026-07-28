@@ -81,6 +81,6 @@ def test_tool_request_transitions_through_using_tool(tmp_path: Path) -> None:
             "speaking",
             "idle",
         ]
-        assert output == ["Desk Pet> It is noon."]
+        assert output == ["DeskBob> It is noon."]
 
     asyncio.run(scenario())

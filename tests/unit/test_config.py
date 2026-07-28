@@ -10,8 +10,10 @@ def test_loads_windows_configuration() -> None:
 
     assert config.profile == "windows"
     assert config.trigger.driver == "keyboard"
-    assert config.trigger.listen_key == "space"
-    assert config.face.driver == "terminal"
+    assert config.trigger.listen_key == "right_alt"
+    assert config.face.driver == "desktop_preview"
+    assert config.audio.speech_speed == 1.5
+    assert config.audio.thinking_audio_enabled
 
 
 def test_environment_default_is_expanded(tmp_path: Path) -> None:
@@ -39,6 +41,9 @@ audio:
   speech_model: test-speech
   voice: test-voice
   speech_speed: 1.5
+  thinking_audio_enabled: true
+  thinking_volume: 0.16
+  thinking_clip_seconds: 4.2
 camera:
   driver: opencv
   index: 0

@@ -38,6 +38,9 @@ class AudioConfig:
     speech_model: str
     voice: str
     speech_speed: float
+    thinking_audio_enabled: bool
+    thinking_volume: float
+    thinking_clip_seconds: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -251,6 +254,25 @@ def load_config(path: str | Path) -> AppConfig:
                 minimum=0.25,
                 maximum=4.0,
             ),
+            thinking_audio_enabled=_required_boolean(
+                audio,
+                "thinking_audio_enabled",
+                "audio",
+            ),
+            thinking_volume=_bounded_number(
+                audio,
+                "thinking_volume",
+                "audio",
+                minimum=0.01,
+                maximum=1.0,
+            ),
+            thinking_clip_seconds=_bounded_number(
+                audio,
+                "thinking_clip_seconds",
+                "audio",
+                minimum=1.0,
+                maximum=10.0,
+            ),
         ),
         camera=CameraConfig(
             driver=_required_string(camera, "driver", "camera"),
@@ -278,9 +300,7 @@ def load_config(path: str | Path) -> AppConfig:
         ),
         context=ContextConfig(
             persona_path=Path(_required_string(context, "persona_path", "context")),
-            user_profile_path=Path(
-                _required_string(context, "user_profile_path", "context")
-            ),
+            user_profile_path=Path(_required_string(context, "user_profile_path", "context")),
             maximum_characters=_positive_integer(
                 context,
                 "maximum_characters",

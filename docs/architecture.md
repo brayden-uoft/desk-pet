@@ -56,7 +56,7 @@ requests and exposes no shell, filesystem, email, or calendar actions.
 
 ```text
 STARTING -> IDLE
-Space down -> LISTENING -> Space up -> TRANSCRIBING -> THINKING
+Right Alt down -> LISTENING -> Right Alt up -> TRANSCRIBING -> THINKING
       -> optional USING_TOOL -> SPEAKING -> IDLE
 Escape during LISTENING or SPEAKING -> cancel operation -> IDLE
 Escape while IDLE -> clean shutdown
@@ -68,14 +68,16 @@ tests replace all four without opening a physical device or contacting an API.
 The application transfers WAV bytes in memory instead of persisting temporary
 media.
 
-Windows voice mode polls the physical Space key state. A down edge starts the
+Windows voice mode globally polls the physical right Alt key state. A down edge starts the
 microphone and an up edge requests a graceful stop, preserving the captured
 audio for transcription. Escape uses the separate cancellation signal and
-discards the active recording.
+discards active recording or playback. Idle Escape presses are ignored in the
+packaged Windows application so background use is not interrupted; Ctrl+C or
+closing the terminal shuts it down.
 
 The keyboard adapter polls for keys asynchronously. This lets cancellation
 stop waiting cleanly without leaving a blocked background thread that could
-consume a later Space or Escape press.
+consume a later right Alt or Escape press.
 
 ## Stage 5 vision flow
 
@@ -121,3 +123,34 @@ after restarting the application.
 This stage provides approved identity continuity, not learned memory. Durable
 remember, inspect, correct, forget, and personality-evolution services remain
 separate later stages.
+
+## Desktop face preview
+
+The hardware-independent face model produces animated binary matrices with
+exactly 16 rows and 32 columns. A value is either on or off; the preview maps on
+to red and off to near-black. There is no RGB state in the model.
+
+The Windows adapter renders those frames in a dedicated Tk process while
+retaining terminal state output. Using a separate process keeps Tk on its own
+main thread and prevents the UI event loop from blocking asyncio, microphone
+capture, model calls, or playback. Closing the preview window does not stop
+DeskBob; exiting DeskBob closes the preview process.
+
+## Non-blocking thinking audio
+
+Voice mode procedurally generates four mechanical clips in memory during
+application startup. It also prepares distinct push-to-talk press and release
+cues. On push-to-talk release, the acknowledgement and first robot-brain loop
+start before transcription, then varied loops continue concurrently through
+transcription, model/tool work, and final-answer synthesis:
+
+```text
+Right Alt down -> press cue -> record
+Right Alt up -> release cue + machine loop -> transcribe -> model/tools
+             -> synthesize answer -> stop loop -> SPEAKING -> play answer
+```
+
+The final response pipeline never awaits completion of a machine loop. It only
+signals cancellation before answer playback, bounded by the player's short
+audio block. No interaction sound is written to disk or fetched from a
+third-party asset.

@@ -26,6 +26,9 @@ audio:
   speech_model: ${OPENAI_SPEECH_MODEL:-tts-1}
   voice: ${OPENAI_SPEECH_VOICE:-echo}
   speech_speed: 1.5
+  thinking_audio_enabled: true
+  thinking_volume: 0.16
+  thinking_clip_seconds: 4.2
 
 camera:
   driver: opencv

@@ -22,6 +22,9 @@ class FakeFace:
     async def set_state(self, state: str) -> None:
         self.states.append(state)
 
+    async def close(self) -> None:
+        return None
+
 
 class QueueTrigger:
     def __init__(self) -> None:
@@ -116,6 +119,29 @@ class CancellablePlayer:
             await asyncio.sleep(0)
         self.cancelled = True
         raise AudioCancelled("Playback cancelled.")
+
+
+class FakeThinkingAudio:
+    def __init__(self) -> None:
+        self.prepared = False
+        self.started = False
+        self.listen_started_count = 0
+        self.start_count = 0
+        self.stop_count = 0
+
+    async def prepare(self) -> None:
+        self.prepared = True
+
+    async def listen_started(self) -> None:
+        self.listen_started_count += 1
+
+    async def start(self) -> None:
+        self.started = True
+        self.start_count += 1
+
+    async def stop(self) -> None:
+        self.started = False
+        self.stop_count += 1
 
 
 class FakeCamera:
