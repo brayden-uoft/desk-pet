@@ -17,7 +17,17 @@ class WebSearchTool(TypedDict):
     search_context_size: Literal["low", "medium", "high"]
 
 
-ModelTool = ToolSchema | WebSearchTool
+class MCPConnectorTool(TypedDict):
+    type: Literal["mcp"]
+    server_label: str
+    server_description: str
+    connector_id: str
+    authorization: str
+    require_approval: Literal["never"]
+    allowed_tools: list[str]
+
+
+ModelTool = ToolSchema | WebSearchTool | MCPConnectorTool
 
 
 class ToolOutputText(TypedDict):

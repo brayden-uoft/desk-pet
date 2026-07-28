@@ -7,7 +7,14 @@ from typing import Any, Literal, Protocol, cast
 from openai import AsyncOpenAI
 
 from desk_pet.agent.prompts import DESK_PET_INSTRUCTIONS
-from desk_pet.agent.tool_protocol import ModelTool, ModelTurn, ToolCall, ToolSchema, WebSearchTool
+from desk_pet.agent.tool_protocol import (
+    MCPConnectorTool,
+    ModelTool,
+    ModelTurn,
+    ToolCall,
+    ToolSchema,
+    WebSearchTool,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +74,7 @@ class OpenAIModelClient:
         maximum_output_tokens: int,
         web_search_enabled: bool = False,
         web_search_context_size: Literal["low", "medium", "high"] = "low",
+        connector_tools: Sequence[MCPConnectorTool] = (),
         instructions: str = DESK_PET_INSTRUCTIONS,
         responses: _ResponsesAPI | None = None,
     ) -> None:
@@ -79,6 +87,7 @@ class OpenAIModelClient:
         self._maximum_output_tokens = maximum_output_tokens
         self._web_search_enabled = web_search_enabled
         self._web_search_context_size = web_search_context_size
+        self._connector_tools = list(connector_tools)
         self._instructions = instructions
 
     async def create_response(
@@ -94,6 +103,7 @@ class OpenAIModelClient:
                     search_context_size=self._web_search_context_size,
                 )
             )
+        model_tools.extend(self._connector_tools)
 
         response = await self._responses.create(
             model=self._model,

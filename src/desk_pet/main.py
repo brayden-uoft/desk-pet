@@ -13,10 +13,12 @@ from typing import Literal, TypeVar, cast
 from dotenv import load_dotenv
 
 from desk_pet.agent.client import OpenAIModelClient
+from desk_pet.agent.connectors import connector_tools_from_environment
 from desk_pet.agent.loop import AgentLoop
 from desk_pet.agent.prompts import DESK_PET_INSTRUCTIONS
 from desk_pet.audio.errors import AudioCancelled, AudioError
 from desk_pet.audio.openai_services import OpenAISpeechSynthesizer, OpenAITranscriptionService
+from desk_pet.audio.speech_text import text_for_speech
 from desk_pet.audio.thinking import ThinkingAudio, ThinkingAudioController
 from desk_pet.config import AppConfig, ConfigError, load_config
 from desk_pet.conversation import ConversationError, ConversationService
@@ -153,7 +155,10 @@ class DeskPetApplication:
             assert self.synthesizer is not None
             assert self.player is not None
             try:
-                speech = await self.synthesizer.synthesize(assistant_text)
+                spoken_text = text_for_speech(assistant_text)
+                if not spoken_text:
+                    spoken_text = "I put the link in the text window."
+                speech = await self.synthesizer.synthesize(spoken_text)
                 await self._stop_thinking_audio()
                 await self.state.transition_to(PetState.SPEAKING)
                 self.output(f"DeskBob> {assistant_text}")
@@ -256,6 +261,12 @@ def build_application(
         raise ConfigError(str(exc)) from exc
     instructions = DESK_PET_INSTRUCTIONS + build_context_instructions(runtime_context)
 
+    connector_tools = connector_tools_from_environment()
+    if connector_tools:
+        LOGGER.info(
+            "Enabled read-only connectors: %s",
+            ", ".join(tool["server_label"] for tool in connector_tools),
+        )
     response_model = OpenAIModelClient(
         model=config.agent.model,
         reasoning_effort=config.agent.reasoning_effort,
@@ -263,6 +274,7 @@ def build_application(
         maximum_output_tokens=config.agent.maximum_output_tokens,
         web_search_enabled=config.agent.web_search_enabled,
         web_search_context_size=config.agent.web_search_context_size,
+        connector_tools=connector_tools,
         instructions=instructions,
     )
     events = EventBus()
