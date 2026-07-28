@@ -5,7 +5,7 @@ import importlib
 from collections.abc import Iterator
 from typing import Any
 
-from desk_pet.audio.errors import AudioError
+from desk_pet.audio.errors import AudioCancelled, AudioError
 from desk_pet.audio.wav import capture_wav, decode_wav, playback_blocks
 from desk_pet.hardware.interfaces import CancellationToken
 
@@ -104,11 +104,18 @@ class SoundDevicePlayer:
                 channels=channels,
                 dtype="int16",
             ) as stream:
-                playback_blocks(
-                    _chunks(frames, block_size),
-                    stream.write,
-                    cancellation=cancellation,
-                )
+                try:
+                    playback_blocks(
+                        _chunks(frames, block_size),
+                        stream.write,
+                        cancellation=cancellation,
+                    )
+                except AudioCancelled:
+                    # Closing an active PortAudio stream normally drains queued
+                    # samples. Abort first so Escape discards buffered speech
+                    # instead of audibly continuing during context-manager exit.
+                    stream.abort()
+                    raise
         except AudioError:
             raise
         except Exception as exc:
