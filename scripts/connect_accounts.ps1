@@ -59,11 +59,14 @@ function Initialize-MicrosoftOAuth {
     $Status = & $Python -m desk_pet.auth.wizard --status
     if ($Status -match "microsoft(?::\S+)?\s+(connected|ready to sign in)") { return }
 
+    $AzPath = "${env:ProgramFiles}\Microsoft SDKs\Azure\CLI2\wbin\az.cmd"
     $Az = Get-Command az -ErrorAction SilentlyContinue
+    if (-not $Az -and (Test-Path $AzPath)) {
+        $Az = @{ Source = $AzPath }
+    }
     if (-not $Az) {
         Write-Host "`nInstalling the Microsoft Azure CLI (one time)..."
         winget install --id Microsoft.AzureCLI -e --accept-package-agreements --accept-source-agreements
-        $AzPath = "${env:ProgramFiles}\Microsoft SDKs\Azure\CLI2\wbin\az.cmd"
         if (-not (Test-Path $AzPath)) {
             throw "Azure CLI installed, but this PowerShell session cannot find it. Reopen PowerShell and rerun this script."
         }
