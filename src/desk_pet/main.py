@@ -116,6 +116,8 @@ class DeskPetApplication:
 
     async def _handle_listen(self) -> None:
         await self.state.transition_to(PetState.LISTENING)
+        if self.interaction_mode == "voice" and self.thinking_audio is not None:
+            await self.thinking_audio.listen_started()
         if self.conversation is None:
             await asyncio.sleep(0.35)
             await self.state.transition_to(PetState.IDLE)
@@ -128,9 +130,7 @@ class DeskPetApplication:
             return
         if not user_text:
             if self.interaction_mode == "voice":
-                self.output(
-                    "I didn't hear a question. Hold the push-to-talk key while speaking."
-                )
+                self.output("I didn't hear a question. Hold the push-to-talk key while speaking.")
             else:
                 self.output("Type a message after pressing the input key.")
             await self._stop_thinking_audio()
@@ -330,9 +330,9 @@ def build_application(
         player = SoundDevicePlayer(device=config.audio.output_device)
         if config.audio.thinking_audio_enabled:
             thinking_audio = ThinkingAudioController(
-                synthesizer=synthesizer,
                 player=player,
-                phrase=config.audio.thinking_phrase,
+                volume=config.audio.thinking_volume,
+                clip_seconds=config.audio.thinking_clip_seconds,
             )
     face: FaceDevice = (
         DesktopPreviewFace() if config.face.driver == "desktop_preview" else TerminalFace()

@@ -23,7 +23,8 @@ audio:
   voice: ${OPENAI_SPEECH_VOICE:-echo}
   speech_speed: 1.5
   thinking_audio_enabled: true
-  thinking_phrase: "Uhh... umm... just thinking... got it... processing..."
+  thinking_volume: 0.16
+  thinking_clip_seconds: 4.2
 
 camera:
   driver: opencv

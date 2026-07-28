@@ -25,7 +25,12 @@ async def _run_demo(*, cycles: int, state_seconds: float) -> None:
         while cycles == 0 or completed_cycles < cycles:
             for state in DEMO_STATES:
                 await face.set_state(state)
-                await asyncio.sleep(state_seconds)
+                display_seconds = state_seconds
+                if state == "idle":
+                    display_seconds = max(display_seconds, 7.0)
+                elif state == "speaking":
+                    display_seconds = max(display_seconds, 2.5)
+                await asyncio.sleep(display_seconds)
             completed_cycles += 1
     finally:
         await face.close()

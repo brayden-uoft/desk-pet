@@ -138,16 +138,19 @@ DeskBob; exiting DeskBob closes the preview process.
 
 ## Non-blocking thinking audio
 
-Voice mode synthesizes one short filler clip in memory during application
-startup. On push-to-talk release, playback starts before transcription and
-loops concurrently through transcription, model/tool work, and final-answer
-synthesis:
+Voice mode procedurally generates four mechanical clips in memory during
+application startup. It also prepares distinct push-to-talk press and release
+cues. On push-to-talk release, the acknowledgement and first robot-brain loop
+start before transcription, then varied loops continue concurrently through
+transcription, model/tool work, and final-answer synthesis:
 
 ```text
-Right Alt up -> start filler -> transcribe -> model/tools -> synthesize answer
-         -> stop filler -> SPEAKING -> play answer
+Right Alt down -> press cue -> record
+Right Alt up -> release cue + machine loop -> transcribe -> model/tools
+             -> synthesize answer -> stop loop -> SPEAKING -> play answer
 ```
 
-The final response pipeline never awaits completion of the filler phrase. It
-only signals cancellation before answer playback, bounded by the player's
-short audio block. The filler clip is not written to disk.
+The final response pipeline never awaits completion of a machine loop. It only
+signals cancellation before answer playback, bounded by the player's short
+audio block. No interaction sound is written to disk or fetched from a
+third-party asset.

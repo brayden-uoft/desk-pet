@@ -86,6 +86,7 @@ def test_voice_question_produces_spoken_response_without_hardware(tmp_path: Path
         assert synthesizer.texts == ["Pandas live in China."]
         assert player.audio == [b"fake-speech-wav"]
         assert thinking_audio.prepared
+        assert thinking_audio.listen_started_count == 1
         assert thinking_audio.start_count == 1
         assert thinking_audio.stop_count == 1
         assert output == [
@@ -108,6 +109,9 @@ def test_thinking_audio_does_not_block_response_work(tmp_path: Path) -> None:
         class OrderedThinkingAudio:
             async def prepare(self) -> None:
                 events.append("prepare")
+
+            async def listen_started(self) -> None:
+                events.append("listen_cue")
 
             async def start(self) -> None:
                 events.append("filler_start")
@@ -156,6 +160,7 @@ def test_thinking_audio_does_not_block_response_work(tmp_path: Path) -> None:
 
         assert events == [
             "prepare",
+            "listen_cue",
             "filler_start",
             "transcribe",
             "synthesize_answer",

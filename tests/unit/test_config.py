@@ -42,7 +42,8 @@ audio:
   voice: test-voice
   speech_speed: 1.5
   thinking_audio_enabled: true
-  thinking_phrase: Testing my circuits.
+  thinking_volume: 0.16
+  thinking_clip_seconds: 4.2
 camera:
   driver: opencv
   index: 0

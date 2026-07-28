@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+import random
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 FACE_WIDTH = 32
 FACE_HEIGHT = 16
 PixelFrame = tuple[tuple[int, ...], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class TimedFrame:
+    pixels: PixelFrame
+    duration_ms: int
 
 
 class _FrameBuilder:
@@ -36,19 +44,53 @@ def _open_eyes(builder: _FrameBuilder, *, pupil_offset: int = 0) -> None:
         builder.pixels(((pupil_x, 5), (pupil_x, 6)))
 
 
+def _happy_eyes(builder: _FrameBuilder) -> None:
+    for left in (5, 21):
+        builder.pixels(
+            (
+                (left, 6),
+                (left + 1, 5),
+                (left + 2, 4),
+                (left + 3, 4),
+                (left + 4, 5),
+                (left + 5, 6),
+            )
+        )
+
+
 def _smile(builder: _FrameBuilder) -> None:
     builder.pixels(((11, 11), (20, 11), (12, 12), (19, 12)))
     builder.horizontal(13, 18, 13)
 
 
-def _idle(*, blink: bool = False) -> PixelFrame:
+def _idle(
+    *,
+    blink: bool = False,
+    pupil_offset: int = 0,
+    mouth: str = "smile",
+) -> PixelFrame:
     builder = _FrameBuilder()
     if blink:
         builder.horizontal(5, 10, 6)
         builder.horizontal(21, 26, 6)
     else:
-        _open_eyes(builder)
-    _smile(builder)
+        _open_eyes(builder, pupil_offset=pupil_offset)
+    if mouth == "smile":
+        _smile(builder)
+    elif mouth == "smirk":
+        builder.horizontal(12, 18, 12)
+        builder.pixels(((19, 11), (20, 10)))
+    elif mouth == "tongue":
+        builder.horizontal(12, 19, 11)
+        builder.pixels(((14, 12), (15, 12), (16, 12), (17, 12)))
+        builder.horizontal(15, 17, 13)
+        builder.pixels(((16, 14),))
+    elif mouth == "lick_left":
+        builder.horizontal(13, 19, 12)
+        builder.pixels(((12, 11), (11, 10), (10, 11)))
+    elif mouth == "lick_right":
+        builder.horizontal(12, 18, 12)
+        builder.pixels(((19, 11), (20, 10), (21, 11)))
     return builder.frame()
 
 
@@ -84,18 +126,31 @@ def _using_tool(*, scanline: int) -> PixelFrame:
     return builder.frame()
 
 
-def _speaking(*, open_mouth: bool) -> PixelFrame:
+def _speaking(*, mouth: str, eyes: str = "happy") -> PixelFrame:
     builder = _FrameBuilder()
-    builder.pixels(((6, 5), (7, 4), (8, 4), (9, 5)))
-    builder.pixels(((22, 5), (23, 4), (24, 4), (25, 5)))
-    if open_mouth:
+    if eyes == "happy":
+        _happy_eyes(builder)
+    else:
+        _open_eyes(builder, pupil_offset={"left": -1, "right": 1}.get(eyes, 0))
+    if mouth == "closed":
+        builder.horizontal(12, 19, 12)
+    elif mouth == "small":
+        builder.horizontal(14, 17, 11)
+        builder.horizontal(14, 17, 13)
+        builder.pixels(((13, 12), (18, 12)))
+    elif mouth == "medium":
         builder.horizontal(12, 19, 11)
         builder.horizontal(12, 19, 14)
         builder.vertical(11, 12, 13)
         builder.vertical(20, 12, 13)
-    else:
-        builder.pixels(((12, 12), (19, 12), (13, 13), (18, 13)))
-        builder.horizontal(14, 17, 14)
+    elif mouth == "wide":
+        builder.horizontal(10, 21, 11)
+        builder.horizontal(12, 19, 15)
+        builder.pixels(((10, 12), (11, 13), (20, 13), (21, 12), (12, 14), (19, 14)))
+    elif mouth == "side":
+        builder.horizontal(12, 18, 11)
+        builder.horizontal(14, 20, 14)
+        builder.pixels(((11, 12), (12, 13), (19, 12), (20, 13)))
     return builder.frame()
 
 
@@ -123,25 +178,131 @@ def _error() -> PixelFrame:
     return builder.frame()
 
 
+FACE_FRAMES: dict[str, PixelFrame] = {
+    "idle": _idle(),
+    "blink": _idle(blink=True),
+    "look_left": _idle(pupil_offset=-1),
+    "look_right": _idle(pupil_offset=1),
+    "smirk": _idle(mouth="smirk"),
+    "tongue": _idle(mouth="tongue"),
+    "lick_left": _idle(mouth="lick_left"),
+    "lick_right": _idle(mouth="lick_right"),
+    "listen_0": _listening(wave=0),
+    "listen_1": _listening(wave=1),
+    "listen_2": _listening(wave=2),
+    "think_left": _thinking(pupil_offset=-1, dot=0),
+    "think_center": _thinking(pupil_offset=0, dot=1),
+    "think_right": _thinking(pupil_offset=1, dot=2),
+    "tool_0": _using_tool(scanline=0),
+    "tool_1": _using_tool(scanline=1),
+    "talk_closed": _speaking(mouth="closed", eyes="center"),
+    "talk_small": _speaking(mouth="small", eyes="happy"),
+    "talk_medium": _speaking(mouth="medium", eyes="left"),
+    "talk_wide": _speaking(mouth="wide", eyes="happy"),
+    "talk_side": _speaking(mouth="side", eyes="right"),
+    "error": _error(),
+}
+
 FACE_ANIMATIONS: dict[str, tuple[PixelFrame, ...]] = {
-    "idle": (_idle(), _idle(), _idle(blink=True), _idle()),
-    "listening": (_listening(wave=0), _listening(wave=1), _listening(wave=2)),
+    "idle": tuple(
+        FACE_FRAMES[name]
+        for name in (
+            "idle",
+            "blink",
+            "look_left",
+            "look_right",
+            "smirk",
+            "tongue",
+            "lick_left",
+            "lick_right",
+        )
+    ),
+    "listening": tuple(FACE_FRAMES[f"listen_{index}"] for index in range(3)),
     "transcribing": (
-        _thinking(pupil_offset=-1, dot=0),
-        _thinking(pupil_offset=0, dot=1),
-        _thinking(pupil_offset=1, dot=2),
+        FACE_FRAMES["think_left"],
+        FACE_FRAMES["think_center"],
+        FACE_FRAMES["think_right"],
     ),
     "thinking": (
-        _thinking(pupil_offset=-1, dot=0),
-        _thinking(pupil_offset=0, dot=1),
-        _thinking(pupil_offset=1, dot=2),
+        FACE_FRAMES["think_left"],
+        FACE_FRAMES["think_center"],
+        FACE_FRAMES["think_right"],
     ),
-    "using_tool": (_using_tool(scanline=0), _using_tool(scanline=1)),
-    "speaking": (_speaking(open_mouth=False), _speaking(open_mouth=True)),
-    "error": (_error(),),
-    "starting": (_thinking(pupil_offset=0, dot=0),),
+    "using_tool": (FACE_FRAMES["tool_0"], FACE_FRAMES["tool_1"]),
+    "speaking": tuple(
+        FACE_FRAMES[f"talk_{mouth}"] for mouth in ("closed", "small", "medium", "wide", "side")
+    ),
+    "error": (FACE_FRAMES["error"],),
+    "starting": (FACE_FRAMES["think_center"],),
 }
 
 
 def frames_for_state(state: str) -> tuple[PixelFrame, ...]:
     return FACE_ANIMATIONS.get(state, FACE_ANIMATIONS["idle"])
+
+
+def animation_cycle_for_state(
+    state: str,
+    rng: random.Random | None = None,
+) -> tuple[TimedFrame, ...]:
+    """Build one varied animation cycle with state-specific frame timing."""
+    randomizer = rng or random.Random()
+    if state == "idle" or state not in FACE_ANIMATIONS:
+        return _idle_cycle(randomizer)
+    if state == "speaking":
+        count = randomizer.randint(4, 8)
+        names = ["talk_small", "talk_medium", "talk_wide", "talk_side"]
+        sequence = [TimedFrame(FACE_FRAMES["talk_closed"], randomizer.randint(70, 130))]
+        for _ in range(count):
+            sequence.append(
+                TimedFrame(
+                    FACE_FRAMES[randomizer.choice(names)],
+                    randomizer.randint(85, 210),
+                )
+            )
+        return tuple(sequence)
+    durations = {
+        "listening": (120, 210),
+        "transcribing": (180, 340),
+        "thinking": (180, 340),
+        "using_tool": (120, 220),
+        "error": (650, 900),
+        "starting": (250, 450),
+    }
+    low, high = durations[state]
+    return tuple(
+        TimedFrame(frame, randomizer.randint(low, high)) for frame in FACE_ANIMATIONS[state]
+    )
+
+
+def _idle_cycle(rng: random.Random) -> tuple[TimedFrame, ...]:
+    resting = TimedFrame(FACE_FRAMES["idle"], rng.randint(2400, 6200))
+    action: tuple[TimedFrame, ...]
+    behavior = rng.choices(
+        ("blink", "double_blink", "look", "lick", "tongue", "smirk"),
+        weights=(28, 6, 32, 10, 8, 16),
+        k=1,
+    )[0]
+    if behavior == "blink":
+        action = (TimedFrame(FACE_FRAMES["blink"], rng.randint(80, 145)),)
+    elif behavior == "double_blink":
+        action = (
+            TimedFrame(FACE_FRAMES["blink"], 90),
+            TimedFrame(FACE_FRAMES["idle"], 125),
+            TimedFrame(FACE_FRAMES["blink"], 95),
+        )
+    elif behavior == "look":
+        direction = rng.choice(("look_left", "look_right"))
+        action = (TimedFrame(FACE_FRAMES[direction], rng.randint(550, 1500)),)
+    elif behavior == "lick":
+        direction = rng.choice(("lick_left", "lick_right"))
+        other = "lick_right" if direction == "lick_left" else "lick_left"
+        action = (
+            TimedFrame(FACE_FRAMES[direction], rng.randint(110, 190)),
+            TimedFrame(FACE_FRAMES[other], rng.randint(110, 190)),
+        )
+    elif behavior == "tongue":
+        action = (TimedFrame(FACE_FRAMES["tongue"], rng.randint(220, 520)),)
+    else:
+        action = (TimedFrame(FACE_FRAMES["smirk"], rng.randint(450, 1100)),)
+    return (resting, *action, TimedFrame(FACE_FRAMES["idle"], rng.randint(220, 520)))

@@ -46,11 +46,27 @@ starting the AI or using an API key:
 .\scripts\preview_face.ps1
 ```
 
-After right Alt is released, DeskBob immediately loops a preloaded “uhh... umm...
-just thinking...” voice clip while transcription, model work, tools, and final
-speech synthesis continue concurrently. The filler stops immediately before
-the real answer plays, so it fills dead air without delaying the answer.
-Disable it with `audio.thinking_audio_enabled` in `configs/windows.yaml`.
+DeskBob plays a short rising chirp when right Alt is pressed and a falling
+acknowledgement when it is released. While transcription, model work, tools,
+and final speech synthesis continue concurrently, a locally generated robot
+brain soundscape fills the dead air with a low cog-like whirr, relay clicks,
+and irregular electronic beeps. Four different loops are generated in memory
+at startup, require no API call or downloaded audio, and stop immediately
+before the real answer plays. Disable all interaction sounds with
+`audio.thinking_audio_enabled` in `configs/windows.yaml`; adjust
+`audio.thinking_volume` to make them quieter or louder.
+
+Preview the exact interaction sound design without an API call:
+
+```powershell
+.\scripts\preview_sounds.ps1
+```
+
+The passive face now holds still for a randomized few seconds between small
+behaviors instead of blinking once per second. It occasionally blinks, looks
+left or right, smirks, licks its lips, or sticks out its tongue. Spoken answers
+use several irregularly timed mouth and eye shapes rather than alternating
+between only two frames.
 
 Ask a visual question such as `What am I holding?` to let the model request
 one webcam frame. The terminal enters `USING_TOOL`, OpenCV captures and

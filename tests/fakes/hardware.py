@@ -125,11 +125,15 @@ class FakeThinkingAudio:
     def __init__(self) -> None:
         self.prepared = False
         self.started = False
+        self.listen_started_count = 0
         self.start_count = 0
         self.stop_count = 0
 
     async def prepare(self) -> None:
         self.prepared = True
+
+    async def listen_started(self) -> None:
+        self.listen_started_count += 1
 
     async def start(self) -> None:
         self.started = True
