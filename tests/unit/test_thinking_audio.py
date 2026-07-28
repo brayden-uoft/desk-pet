@@ -68,3 +68,25 @@ def test_thinking_audio_cues_and_loop_stop_cleanly() -> None:
         assert player.cancel_count == 2
 
     asyncio.run(scenario())
+
+
+def test_each_interaction_starts_with_the_next_machine_loop() -> None:
+    async def scenario() -> None:
+        player = RecordingCancellablePlayer()
+        controller = ThinkingAudioController(
+            player=player,
+            clip_seconds=1.0,
+            clip_count=3,
+            seed=11,
+        )
+
+        await controller.prepare()
+        for _ in range(3):
+            await controller.start()
+            await asyncio.sleep(0)
+            await controller.stop()
+
+        assert len(player.audio) == 3
+        assert len(set(player.audio)) == 3
+
+    asyncio.run(scenario())

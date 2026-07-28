@@ -196,10 +196,9 @@ FACE_FRAMES: dict[str, PixelFrame] = {
     "tool_0": _using_tool(scanline=0),
     "tool_1": _using_tool(scanline=1),
     "talk_closed": _speaking(mouth="closed", eyes="center"),
-    "talk_small": _speaking(mouth="small", eyes="happy"),
-    "talk_medium": _speaking(mouth="medium", eyes="left"),
-    "talk_wide": _speaking(mouth="wide", eyes="happy"),
-    "talk_side": _speaking(mouth="side", eyes="right"),
+    "talk_small": _speaking(mouth="small", eyes="center"),
+    "talk_medium": _speaking(mouth="medium", eyes="center"),
+    "talk_wide": _speaking(mouth="wide", eyes="center"),
     "error": _error(),
 }
 
@@ -230,7 +229,7 @@ FACE_ANIMATIONS: dict[str, tuple[PixelFrame, ...]] = {
     ),
     "using_tool": (FACE_FRAMES["tool_0"], FACE_FRAMES["tool_1"]),
     "speaking": tuple(
-        FACE_FRAMES[f"talk_{mouth}"] for mouth in ("closed", "small", "medium", "wide", "side")
+        FACE_FRAMES[f"talk_{mouth}"] for mouth in ("closed", "small", "medium", "wide")
     ),
     "error": (FACE_FRAMES["error"],),
     "starting": (FACE_FRAMES["think_center"],),
@@ -250,16 +249,19 @@ def animation_cycle_for_state(
     if state == "idle" or state not in FACE_ANIMATIONS:
         return _idle_cycle(randomizer)
     if state == "speaking":
-        count = randomizer.randint(4, 8)
-        names = ["talk_small", "talk_medium", "talk_wide", "talk_side"]
-        sequence = [TimedFrame(FACE_FRAMES["talk_closed"], randomizer.randint(70, 130))]
-        for _ in range(count):
-            sequence.append(
-                TimedFrame(
-                    FACE_FRAMES[randomizer.choice(names)],
-                    randomizer.randint(85, 210),
-                )
+        names = ("talk_closed", "talk_small", "talk_medium", "talk_wide")
+        mouth_levels = [0]
+        for _ in range(randomizer.randint(2, 4)):
+            peak = randomizer.choices((1, 2, 3), weights=(3, 5, 2), k=1)[0]
+            mouth_levels.extend(range(1, peak + 1))
+            mouth_levels.extend(range(peak - 1, -1, -1))
+        sequence = [
+            TimedFrame(
+                FACE_FRAMES[names[level]],
+                randomizer.randint(145, 245),
             )
+            for level in mouth_levels
+        ]
         return tuple(sequence)
     durations = {
         "listening": (120, 210),

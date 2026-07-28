@@ -59,21 +59,26 @@ def generate_mechanical_thinking_wav(
     rng = random.Random(seed)
     sample_count = round(SAMPLE_RATE_HZ * duration_seconds)
     samples = [0.0] * sample_count
-    motor_hz = rng.uniform(72.0, 96.0)
-    modulation_hz = rng.uniform(1.1, 2.4)
+    motor_hz = rng.uniform(82.0, 98.0)
+    drift_segment_samples = round(SAMPLE_RATE_HZ * rng.uniform(0.42, 0.78))
+    drift_point_count = sample_count // drift_segment_samples + 2
+    pitch_drift = [rng.uniform(-4.0, 4.0) for _ in range(drift_point_count)]
+    drive_levels = [rng.uniform(0.65, 0.90) for _ in range(drift_point_count)]
     motor_phase = 0.0
 
     for index in range(sample_count):
-        time_seconds = index / SAMPLE_RATE_HZ
-        wobble = math.sin(math.tau * modulation_hz * time_seconds) * 4.5
-        motor_phase += math.tau * (motor_hz + wobble) / SAMPLE_RATE_HZ
+        segment = index // drift_segment_samples
+        segment_progress = (index % drift_segment_samples) / drift_segment_samples
+        smooth_progress = segment_progress**2 * (3.0 - 2.0 * segment_progress)
+        drift_hz = _interpolate(pitch_drift, segment, smooth_progress)
+        drive = _interpolate(drive_levels, segment, smooth_progress)
+        motor_phase += math.tau * (motor_hz + drift_hz) / SAMPLE_RATE_HZ
         gear = (
             0.42 * math.sin(motor_phase)
             + 0.18 * math.sin(2.03 * motor_phase)
             + 0.08 * math.sin(5.07 * motor_phase)
         )
-        pulse = 0.72 + 0.20 * math.sin(math.tau * 7.0 * time_seconds)
-        samples[index] += gear * pulse
+        samples[index] += gear * drive
 
     click_count = max(4, round(duration_seconds * rng.uniform(2.0, 3.5)))
     for _ in range(click_count):
@@ -138,6 +143,7 @@ class ThinkingAudioController:
         self._cue_task: asyncio.Task[None] | None = None
         self._cancellation: CancellationToken | None = None
         self._play_task: asyncio.Task[None] | None = None
+        self._next_clip_index = 0
 
     async def prepare(self) -> None:
         seed_source = random.Random(self._seed)
@@ -166,7 +172,9 @@ class ThinkingAudioController:
             return
         await self._stop_cue()
         self._cancellation = CancellationToken()
-        self._play_task = asyncio.create_task(self._play_loop(self._cancellation))
+        starting_index = self._next_clip_index
+        self._next_clip_index = (self._next_clip_index + 1) % len(self._clips)
+        self._play_task = asyncio.create_task(self._play_loop(self._cancellation, starting_index))
         await asyncio.sleep(0)
 
     async def stop(self) -> None:
@@ -196,8 +204,11 @@ class ThinkingAudioController:
         except AudioError:
             LOGGER.warning("Push-to-talk audio cue could not be played")
 
-    async def _play_loop(self, cancellation: CancellationToken) -> None:
-        clip_index = 0
+    async def _play_loop(
+        self,
+        cancellation: CancellationToken,
+        clip_index: int,
+    ) -> None:
         while not cancellation.cancelled:
             clip = self._clips[clip_index % len(self._clips)]
             clip_index += 1
@@ -221,3 +232,7 @@ def _decode_pcm(audio: bytes) -> list[float]:
     with wave.open(io.BytesIO(audio), "rb") as wav_file:
         frames = wav_file.readframes(wav_file.getnframes())
     return [sample[0] / 32767.0 for sample in struct.iter_unpack("<h", frames)]
+
+
+def _interpolate(values: list[float], index: int, progress: float) -> float:
+    return values[index] + (values[index + 1] - values[index]) * progress

@@ -64,9 +64,9 @@ Preview the exact interaction sound design without an API call:
 
 The passive face now holds still for a randomized few seconds between small
 behaviors instead of blinking once per second. It occasionally blinks, looks
-left or right, smirks, licks its lips, or sticks out its tongue. Spoken answers
-use several irregularly timed mouth and eye shapes rather than alternating
-between only two frames.
+left or right, smirks, licks its lips, or sticks out its tongue. During spoken
+answers, the eyes remain stable while the mouth moves gradually through
+neighboring shapes at a calmer cadence.
 
 Ask a visual question such as `What am I holding?` to let the model request
 one webcam frame. The terminal enters `USING_TOOL`, OpenCV captures and

@@ -32,11 +32,25 @@ def test_idle_cycles_hold_for_seconds_and_vary_irregularly() -> None:
     assert FACE_FRAMES["lick_left"] in action_frames
 
 
-def test_speaking_cycles_use_multiple_mouth_shapes_and_irregular_timing() -> None:
+def test_speaking_cycles_keep_eyes_stable_and_move_mouth_one_step_at_a_time() -> None:
     cycle = animation_cycle_for_state("speaking", random.Random(4))
+    mouth_levels = {
+        FACE_FRAMES["talk_closed"]: 0,
+        FACE_FRAMES["talk_small"]: 1,
+        FACE_FRAMES["talk_medium"]: 2,
+        FACE_FRAMES["talk_wide"]: 3,
+    }
+    levels = [mouth_levels[frame.pixels] for frame in cycle]
 
     assert len({frame.pixels for frame in cycle}) >= 3
     assert len({frame.duration_ms for frame in cycle}) >= 3
+    assert all(145 <= frame.duration_ms <= 245 for frame in cycle)
+    assert all(frame.pixels[:10] == cycle[0].pixels[:10] for frame in cycle)
+    assert all(
+        abs(current - previous) <= 1
+        for previous, current in zip(levels, levels[1:], strict=False)
+    )
+    assert levels[0] == levels[-1] == 0
 
 
 def test_preview_palette_is_monochrome_red_and_off() -> None:
