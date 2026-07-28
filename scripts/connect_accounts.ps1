@@ -81,10 +81,11 @@ if ($Provider -eq "status") {
     exit $LASTEXITCODE
 }
 
-$Requested = if ($Provider -eq "all") {
-    @("github", "microsoft", "notion", "google", "slack", "dropbox")
+[string[]]$Requested = @()
+if ($Provider -eq "all") {
+    $Requested = @("github", "microsoft", "notion", "google", "slack", "dropbox")
 } else {
-    @($Provider)
+    $Requested = @($Provider)
 }
 
 if ($Requested -contains "microsoft") {
