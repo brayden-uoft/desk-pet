@@ -29,8 +29,8 @@ function Save-DeskBobClient {
 }
 
 if ($ClientId) {
-    if ($Provider -notin @("slack", "dropbox")) {
-        throw "-ClientId is used only with -Provider slack or dropbox."
+    if ($Provider -notin @("microsoft", "slack", "dropbox")) {
+        throw "-ClientId is used only with -Provider microsoft, slack, or dropbox."
     }
     if ($Provider -eq "slack") {
         $SecureSecret = Read-Host "Slack client secret" -AsSecureString

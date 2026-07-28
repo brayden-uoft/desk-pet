@@ -63,7 +63,12 @@ they let a user sign in:
   paths can fail for accounts without an Azure subscription. If browser login
   still fails, it automatically retries with Microsoft's device-code flow.
   When Microsoft setup fails during the full wizard, the other providers
-  continue instead of being abandoned.
+  continue instead of being abandoned. If a tenant administrator creates the
+  application instead, save its Application (client) ID and continue directly:
+
+  ```powershell
+  .\scripts\connect_accounts.ps1 -Provider microsoft -Account uoft -ClientId APPLICATION_ID
+  ```
 - **Notion:** supports dynamic client registration, so its flow is fully
   automatic apart from sign-in and consent.
 - **GitHub:** reuses `gh auth`; no app registration or copied token is needed.
