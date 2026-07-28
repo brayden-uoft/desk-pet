@@ -10,6 +10,7 @@ import subprocess
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from typing import cast
 
 from dotenv import load_dotenv
 
@@ -18,6 +19,7 @@ from desk_pet.auth.models import OAuthClient, OAuthClientRegistration, OAuthSess
 from desk_pet.auth.oauth import LoopbackAuthorizationBrowser, OAuthFlowError, OAuthManager
 from desk_pet.auth.providers import (
     PROVIDER_REGISTRATIONS,
+    MicrosoftAccountType,
     dropbox_client,
     google_client,
     microsoft_client,
@@ -52,8 +54,19 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--status", action="store_true", help="Show connection status.")
     parser.add_argument(
+        "--no-status",
+        action="store_true",
+        help="Do not print the full account table after this operation.",
+    )
+    parser.add_argument(
         "--account",
         help="Short account label for Google or Microsoft, such as personal or uoft.",
+    )
+    parser.add_argument(
+        "--microsoft-account-type",
+        choices=("personal", "work", "work-teams"),
+        default="personal",
+        help="Microsoft permission profile. Teams may require tenant-admin consent.",
     )
     parser.add_argument(
         "--disconnect",
@@ -125,21 +138,20 @@ def _show_status(store: CredentialStore, environment: Mapping[str, str]) -> None
     for provider in PROVIDERS:
         try:
             sessions = store.list_sessions(provider)
+            if sessions:
+                for session in sessions:
+                    account = _account_from_session_key(provider, session.provider)
+                    display = provider if account is None else f"{provider}:{account}"
+                    print(f"{display:24} connected")
+                continue
+            if provider in {"github", "notion"}:
+                registration = True
+            else:
+                registration = _load_registration(provider, store, environment) is not None
+            detail = "ready to sign in" if registration else "needs one-time OAuth app setup"
+            print(f"{provider:24} {detail}")
         except CredentialStoreError as exc:
             print(f"{provider:24} saved credential is invalid: {exc}")
-            continue
-        if sessions:
-            for session in sessions:
-                account = _account_from_session_key(provider, session.provider)
-                display = provider if account is None else f"{provider}:{account}"
-                print(f"{display:24} connected")
-            continue
-        if provider in {"github", "notion"}:
-            registration = True
-        else:
-            registration = _load_registration(provider, store, environment) is not None
-        detail = "ready to sign in" if registration else "needs one-time OAuth app setup"
-        print(f"{provider:24} {detail}")
 
 
 def _connect_provider(
@@ -149,6 +161,7 @@ def _connect_provider(
     http: UrllibOAuthHTTPClient,
     environment: Mapping[str, str],
     account: str | None,
+    microsoft_account_type: MicrosoftAccountType,
 ) -> bool:
     session_key = _session_key(provider, account)
     if store.load(session_key) is not None:
@@ -170,7 +183,15 @@ def _connect_provider(
             print(f"\n{provider.title()} needs a one-time OAuth app registration.")
             print(f"Setup page: {spec.setup_url}")
             return False
-        client = FACTORIES[provider](environment, registration)
+        client = (
+            microsoft_client(
+                environment,
+                registration,
+                account_type=microsoft_account_type,
+            )
+            if provider == "microsoft"
+            else FACTORIES[provider](environment, registration)
+        )
         if account is not None:
             client = dataclasses.replace(client, provider=f"{provider}:{account}")
         server_url = "https://mcp.slack.com/mcp" if provider == "slack" else None
@@ -292,12 +313,14 @@ def run(
                     http,
                     values,
                     provider_account,
+                    cast(MicrosoftAccountType, args.microsoft_account_type),
                 ):
                     missing.append(provider)
             except (OAuthFlowError, RuntimeError) as exc:
                 print(f"[FAILED] {provider.title()}: {exc}", file=sys.stderr)
                 missing.append(provider)
-        _show_status(credentials, values)
+        if not args.no_status:
+            _show_status(credentials, values)
         if missing:
             print(
                 "\nSome providers still need attention: " + ", ".join(missing) + ".",

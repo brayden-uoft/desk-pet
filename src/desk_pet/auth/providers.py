@@ -4,11 +4,13 @@ import os
 import urllib.parse
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from desk_pet.auth.http import OAuthHTTPClient
 from desk_pet.auth.models import OAuthClient, OAuthClientRegistration
 from desk_pet.auth.oauth import AuthorizationBrowser, OAuthFlowError
+
+MicrosoftAccountType = Literal["personal", "work", "work-teams"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,10 +83,25 @@ def google_client(
 def microsoft_client(
     environment: Mapping[str, str] | None = None,
     registration: OAuthClientRegistration | None = None,
+    *,
+    account_type: MicrosoftAccountType = "personal",
 ) -> OAuthClient:
     values = os.environ if environment is None else environment
     tenant = values.get("DESKBOB_MICROSOFT_TENANT", "common").strip() or "common"
     base = f"https://login.microsoftonline.com/{urllib.parse.quote(tenant, safe='')}/oauth2/v2.0"
+    scopes = [
+        "offline_access",
+        "openid",
+        "profile",
+        "email",
+        "User.Read",
+        "Mail.Read",
+        "Calendars.Read",
+    ]
+    if account_type in {"work", "work-teams"}:
+        scopes.extend(("Files.Read.All", "Sites.Read.All"))
+    if account_type == "work-teams":
+        scopes.extend(("Chat.Read", "ChannelMessage.Read.All"))
     return OAuthClient(
         provider="microsoft",
         client_id=registration.client_id
@@ -92,19 +109,7 @@ def microsoft_client(
         else _required_environment(values, "DESKBOB_MICROSOFT_CLIENT_ID"),
         authorization_endpoint=f"{base}/authorize",
         token_endpoint=f"{base}/token",
-        scopes=(
-            "offline_access",
-            "openid",
-            "profile",
-            "email",
-            "User.Read",
-            "Mail.Read",
-            "Calendars.Read",
-            "Files.Read.All",
-            "Sites.Read.All",
-            "Chat.Read",
-            "ChannelMessage.Read.All",
-        ),
+        scopes=tuple(scopes),
         extra_authorization_parameters=(("prompt", "select_account"),),
     )
 

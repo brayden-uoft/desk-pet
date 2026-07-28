@@ -39,7 +39,14 @@ class LoopbackAuthorizationBrowser:
         self._timeout_seconds = timeout_seconds
         self._browser_open = browser_open
         self._result: dict[str, str] = {}
-        self._server = http.server.ThreadingHTTPServer((host, port), self._handler())
+        try:
+            self._server = http.server.ThreadingHTTPServer((host, port), self._handler())
+        except OSError as exc:
+            port_detail = f" port {port}" if port else " callback port"
+            raise OAuthFlowError(
+                f"DeskBob could not open localhost{port_detail}. Close the program using it "
+                "and run the account wizard again."
+            ) from exc
         self._server.timeout = timeout_seconds
 
     @property
@@ -51,7 +58,7 @@ class LoopbackAuthorizationBrowser:
         try:
             if not self._browser_open(url):
                 raise OAuthFlowError(
-                    "The sign-in page could not be opened. Copy the displayed URL into a browser."
+                    f"The sign-in page could not be opened. Open this URL manually: {url}"
                 )
             self._server.handle_request()
         finally:
@@ -131,11 +138,12 @@ class OAuthManager:
             "response_type": "code",
             "client_id": client.client_id,
             "redirect_uri": browser.redirect_uri,
-            "scope": " ".join(client.scopes),
             "state": state,
             "code_challenge": challenge,
             "code_challenge_method": "S256",
         }
+        if client.scopes:
+            parameters["scope"] = " ".join(client.scopes)
         parameters.update(dict(client.extra_authorization_parameters))
         authorization_url = f"{client.authorization_endpoint}?{urllib.parse.urlencode(parameters)}"
         code = browser.authorize(authorization_url, state)
@@ -234,6 +242,10 @@ def _normalize_token_data(provider: str, value: dict[str, Any]) -> dict[str, Any
     if value.get("ok") is not True:
         error = _optional_token(value.get("error")) or "unknown_error"
         raise OAuthFlowError(f"Slack rejected the token exchange: {error}")
+    # oauth.v2.user.access returns the user token at the top level. The more
+    # general oauth.v2.access endpoint nests it under authed_user.
+    if _optional_token(value.get("access_token")):
+        return value
     authed_user = value.get("authed_user")
     if not isinstance(authed_user, dict):
         raise OAuthFlowError("Slack did not return an authenticated user token.")

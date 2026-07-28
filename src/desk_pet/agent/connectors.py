@@ -216,7 +216,7 @@ class OAuthConnectorLoader:
                 if not authorization:
                     continue
                 account = _account_from_session_key(provider, session.provider)
-                for label in labels:
+                for label in _connector_labels_for_session(provider, labels, session.scopes):
                     server_label = label if account is None else f"{label}_{account}"
                     if server_label in enabled_labels:
                         continue
@@ -266,3 +266,18 @@ def _connector_tool(
 def _account_from_session_key(provider: str, session_key: str) -> str | None:
     prefix = f"{provider}:"
     return session_key[len(prefix) :] if session_key.startswith(prefix) else None
+
+
+def _connector_labels_for_session(
+    provider: str,
+    labels: tuple[str, ...],
+    scopes: tuple[str, ...],
+) -> tuple[str, ...]:
+    if provider != "microsoft":
+        return labels
+    enabled = ["outlook_calendar", "outlook_email"]
+    if "Sites.Read.All" in scopes and "Files.Read.All" in scopes:
+        enabled.append("sharepoint")
+    if "Chat.Read" in scopes and "ChannelMessage.Read.All" in scopes:
+        enabled.append("microsoft_teams")
+    return tuple(enabled)

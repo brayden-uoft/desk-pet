@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Literal, Protocol, cast
 
 from openai import AsyncOpenAI
@@ -77,6 +78,7 @@ class OpenAIModelClient:
         connector_tools: Sequence[MCPTool] = (),
         connector_loader: Callable[[], Awaitable[Sequence[MCPTool]]] | None = None,
         instructions: str = DESK_PET_INSTRUCTIONS,
+        clock: Callable[[], datetime] | None = None,
         responses: _ResponsesAPI | None = None,
     ) -> None:
         if responses is None:
@@ -91,6 +93,7 @@ class OpenAIModelClient:
         self._connector_tools = list(connector_tools)
         self._connector_loader = connector_loader
         self._instructions = instructions
+        self._clock = clock or (lambda: datetime.now().astimezone())
 
     async def create_response(
         self,
@@ -111,7 +114,7 @@ class OpenAIModelClient:
 
         response = await self._responses.create(
             model=self._model,
-            instructions=self._instructions,
+            instructions=self._instructions + _local_time_instructions(self._clock()),
             input=list(input_items),
             tools=model_tools,
             parallel_tool_calls=False,
@@ -134,3 +137,15 @@ class OpenAIModelClient:
             output_text=response.output_text.strip(),
             tool_calls=tool_calls,
         )
+
+
+def _local_time_instructions(now: datetime) -> str:
+    local_now = now.astimezone() if now.tzinfo is None else now
+    timezone_name = local_now.tzname() or "local time"
+    return (
+        "\n\nAuthoritative current local date and time: "
+        f"{local_now.strftime('%A, %B %d, %Y at %I:%M:%S %p')} "
+        f"{timezone_name} (UTC{local_now.strftime('%z')[:3]}:{local_now.strftime('%z')[3:]}). "
+        "Resolve words such as today, tonight, tomorrow, and weekday names from this value. "
+        "Use get_current_time when the exact current time is material."
+    )

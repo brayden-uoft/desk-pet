@@ -3,7 +3,12 @@ param(
     [string]$Provider = "all",
     [string]$GoogleClientJson = "",
     [string]$ClientId = "",
-    [string]$Account = ""
+    [string]$Account = "",
+    [ValidateSet("personal", "work", "work-teams")]
+    [string]$MicrosoftAccountType = "",
+    [switch]$Disconnect,
+    [switch]$DryRun,
+    [switch]$SkipInstall
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,9 +19,12 @@ Set-Location $RepoRoot
 if (-not (Test-Path $Python)) {
     py -3.12 -m venv .venv
 }
-& $Python -m pip install -e ".[desktop]" --quiet
+if (-not $SkipInstall) {
+    & $Python -m pip install -e ".[desktop]" --quiet
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
 
-if ($GoogleClientJson) {
+if ($GoogleClientJson -and -not $DryRun) {
     & $Python -m desk_pet.auth.wizard --import-google-client $GoogleClientJson
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
@@ -28,7 +36,7 @@ function Save-DeskBobClient {
     if ($LASTEXITCODE -ne 0) { throw "Could not save the $Name OAuth registration." }
 }
 
-if ($ClientId) {
+if ($ClientId -and -not $DryRun) {
     if ($Provider -notin @("microsoft", "slack", "dropbox")) {
         throw "-ClientId is used only with -Provider microsoft, slack, or dropbox."
     }
@@ -62,36 +70,32 @@ function Initialize-MicrosoftOAuth {
         $Az = @{ Source = $AzPath }
     }
 
-    Write-Host "`nA Microsoft sign-in page will open. Sign in to the account DeskBob should read."
-    Write-Host "Configuring Azure CLI to avoid the Windows broker and subscription-selector bugs..."
-    & $Az.Source account clear
-    & $Az.Source config set core.enable_broker_on_windows=false core.login_experience_v2=off
+    Write-Host "`nDeskBob first needs one Microsoft OAuth application registration."
+    Write-Host "Sign in with an account that owns an Entra tenant and may create apps."
+    Write-Host "This can be different from the Outlook account DeskBob will read afterward."
+    & $Python -m desk_pet.auth.azure_cli --az $Az.Source
     if ($LASTEXITCODE -ne 0) {
-        throw "Azure CLI could not apply its browser-login compatibility settings."
+        throw "Microsoft OAuth app registration was not completed."
     }
-    & $Az.Source login --allow-no-subscriptions
-    if ($LASTEXITCODE -ne 0) {
-        Write-Warning "Browser login failed. Falling back to Microsoft's device-code login."
-        & $Az.Source account clear
-        & $Az.Source login --allow-no-subscriptions --use-device-code
-    }
-    if ($LASTEXITCODE -ne 0) {
-        throw "Microsoft sign-in was not completed after browser and device-code attempts."
-    }
-    $ClientId = & $Az.Source ad app create `
-        --display-name "DeskBob Local" `
-        --sign-in-audience AzureADandPersonalMicrosoftAccount `
-        --is-fallback-public-client true `
-        --public-client-redirect-uris "http://localhost" `
-        --query appId -o tsv
-    if ($LASTEXITCODE -ne 0 -or -not $ClientId) {
-        throw "Your Microsoft tenant blocked automatic app registration. A tenant admin must allow user app registrations."
-    }
-    Save-DeskBobClient "microsoft" $ClientId.Trim()
 }
 
 if ($Provider -eq "status") {
+    if ($Disconnect) { throw "-Disconnect requires a specific account provider." }
     & $Python -m desk_pet.auth.wizard --status
+    exit $LASTEXITCODE
+}
+
+if ($Disconnect) {
+    if ($Provider -eq "all") {
+        throw "-Disconnect requires one provider at a time."
+    }
+    $DisconnectArguments = @("-m", "desk_pet.auth.wizard", "--disconnect", $Provider)
+    if ($Account) { $DisconnectArguments += @("--account", $Account) }
+    if ($DryRun) {
+        Write-Host "DRY RUN: $Python $($DisconnectArguments -join ' ')"
+        exit 0
+    }
+    & $Python @DisconnectArguments
     exit $LASTEXITCODE
 }
 
@@ -102,27 +106,62 @@ if ($Provider -eq "all") {
     $Requested = @($Provider)
 }
 
-if ($Requested -contains "microsoft") {
-    try {
-        Initialize-MicrosoftOAuth
-    } catch {
-        if ($Provider -eq "microsoft") { throw }
-        Write-Warning "Skipping Microsoft for this run: $($_.Exception.Message)"
-        Write-Warning "The remaining account providers will still be processed."
-        $Requested = @($Requested | Where-Object { $_ -ne "microsoft" })
+$OverallExitCode = 0
+foreach ($RequestedProvider in $Requested) {
+    $ProviderAccount = if ($RequestedProvider -in @("google", "microsoft")) {
+        $Account
+    } else {
+        ""
     }
+    if ($RequestedProvider -in @("google", "microsoft") -and -not $ProviderAccount) {
+        Write-Host "`nGive the $RequestedProvider login a short label so DeskBob can distinguish it."
+        Write-Host "Examples: personal, uoft, work"
+        $ProviderAccount = Read-Host "Account label"
+        if (-not $ProviderAccount) {
+            Write-Warning "Skipping $RequestedProvider because no account label was supplied."
+            $OverallExitCode = 2
+            continue
+        }
+    }
+
+    if ($RequestedProvider -eq "microsoft") {
+        if (-not $MicrosoftAccountType) {
+            Write-Host "`nChoose the Microsoft permission profile:"
+            Write-Host "  personal   - Outlook Mail and Calendar"
+            Write-Host "  work       - Outlook plus SharePoint/OneDrive"
+            Write-Host "  work-teams - Outlook, SharePoint/OneDrive, and Teams (admin may be required)"
+            $MicrosoftAccountType = Read-Host "Profile"
+            if ($MicrosoftAccountType -notin @("personal", "work", "work-teams")) {
+                Write-Warning "Skipping Microsoft because the profile was invalid."
+                $OverallExitCode = 2
+                continue
+            }
+        }
+        try {
+            if (-not $DryRun) { Initialize-MicrosoftOAuth }
+        } catch {
+            Write-Warning "Skipping Microsoft for this run: $($_.Exception.Message)"
+            $OverallExitCode = 2
+            continue
+        }
+    }
+
+    Write-Host "`nDeskBob $RequestedProvider account setup"
+    Write-Host "Only provider sign-in and consent pages will receive your passwords."
+    $WizardArguments = @(
+        "-m", "desk_pet.auth.wizard", $RequestedProvider, "--no-status"
+    )
+    if ($ProviderAccount) { $WizardArguments += @("--account", $ProviderAccount) }
+    if ($RequestedProvider -eq "microsoft") {
+        $WizardArguments += @("--microsoft-account-type", $MicrosoftAccountType)
+    }
+    if ($DryRun) {
+        Write-Host "DRY RUN: $Python $($WizardArguments -join ' ')"
+        continue
+    }
+    & $Python @WizardArguments
+    if ($LASTEXITCODE -ne 0) { $OverallExitCode = 2 }
 }
 
-if ($Provider -in @("google", "microsoft") -and -not $Account) {
-    Write-Host "`nGive this login a short label so DeskBob can distinguish it."
-    Write-Host "Examples: personal, uoft, work"
-    $Account = Read-Host "Account label"
-    if (-not $Account) { throw "An account label is required." }
-}
-
-Write-Host "`nDeskBob account connector wizard"
-Write-Host "Only provider sign-in and consent pages will receive your passwords."
-$WizardArguments = @("-m", "desk_pet.auth.wizard") + $Requested
-if ($Account) { $WizardArguments += @("--account", $Account) }
-& $Python @WizardArguments
-exit $LASTEXITCODE
+if (-not $DryRun) { & $Python -m desk_pet.auth.wizard --status }
+exit $OverallExitCode

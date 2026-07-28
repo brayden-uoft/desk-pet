@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from desk_pet.agent.client import Message, OpenAIModelClient
@@ -190,9 +191,53 @@ def test_openai_client_uses_supplied_runtime_instructions() -> None:
         request_timeout_seconds=10,
         maximum_output_tokens=250,
         instructions="DeskBob runtime context",
+        clock=lambda: datetime(
+            2026,
+            7,
+            27,
+            23,
+            5,
+            tzinfo=timezone(timedelta(hours=-4), "EDT"),
+        ),
         responses=responses,
     )
 
     asyncio.run(client.create_response([{"role": "user", "content": "Hello"}], []))
 
-    assert responses.arguments["instructions"] == "DeskBob runtime context"
+    instructions = responses.arguments["instructions"]
+    assert instructions.startswith("DeskBob runtime context")
+    assert "Monday, July 27, 2026 at 11:05:00 PM EDT (UTC-04:00)" in instructions
+    assert "tomorrow" in instructions
+
+
+def test_openai_client_refreshes_local_time_context_each_model_turn() -> None:
+    responses = FakeResponsesAPI()
+    current = datetime(
+        2026,
+        7,
+        27,
+        23,
+        59,
+        tzinfo=timezone(timedelta(hours=-4), "EDT"),
+    )
+
+    def clock() -> datetime:
+        nonlocal current
+        value = current
+        current += timedelta(minutes=2)
+        return value
+
+    client = OpenAIModelClient(
+        model="test-model",
+        reasoning_effort="low",
+        request_timeout_seconds=10,
+        maximum_output_tokens=250,
+        clock=clock,
+        responses=responses,
+    )
+
+    asyncio.run(client.create_response([{"role": "user", "content": "Tomorrow?"}], []))
+    assert "Monday, July 27, 2026 at 11:59:00 PM" in responses.arguments["instructions"]
+
+    asyncio.run(client.create_response([{"role": "user", "content": "Tomorrow?"}], []))
+    assert "Tuesday, July 28, 2026 at 12:01:00 AM" in responses.arguments["instructions"]

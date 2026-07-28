@@ -16,11 +16,12 @@ token and never prints saved credentials. Check status later with:
 ```
 
 Restart DeskBob after connecting an account. GitHub reuses the GitHub CLI
-login and routes through GitHub's server-enforced read-only MCP endpoint. One Google authorization enables
-Gmail, Google Calendar, and Drive. One Microsoft authorization enables Outlook
-Mail, Outlook Calendar, Teams, SharePoint, and OneDrive. Notion uses its
-official hosted MCP server. Dropbox uses the OpenAI-maintained connector. Slack
-uses Slack's official hosted MCP server.
+login and routes through GitHub's server-enforced read-only MCP endpoint. One
+Google authorization enables Gmail, Google Calendar, and Drive. Microsoft
+permissions are selected with a profile: `personal` enables Outlook Mail and
+Calendar, `work` adds SharePoint/OneDrive, and `work-teams` also adds Teams.
+Notion uses its official hosted MCP server. Dropbox uses the OpenAI-maintained
+connector. Slack uses Slack's official hosted MCP server.
 
 ## Multiple Google and Microsoft accounts
 
@@ -31,7 +32,7 @@ Google or Microsoft setup, the script asks for a short label:
 .\scripts\connect_accounts.ps1 -Provider google -Account personal
 .\scripts\connect_accounts.ps1 -Provider google -Account uoft
 .\scripts\connect_accounts.ps1 -Provider microsoft -Account personal
-.\scripts\connect_accounts.ps1 -Provider microsoft -Account uoft
+.\scripts\connect_accounts.ps1 -Provider microsoft -Account uoft -MicrosoftAccountType work
 ```
 
 The OAuth application registration is reused, but each login gets an
@@ -45,6 +46,12 @@ DeskBob exposes account-qualified tools such as `gmail_personal`,
 `gmail_uoft`, `outlook_calendar_personal`, and `outlook_calendar_uoft`. The
 account label is also included in each tool description so DeskBob can choose
 the right account or search both.
+
+Disconnect a wrong or revoked login before reconnecting it:
+
+```powershell
+.\scripts\connect_accounts.ps1 -Provider google -Account personal -Disconnect
+```
 
 Only explicitly listed read operations are exposed. DeskBob cannot send mail,
 change calendar events, post Slack messages, edit documents, move files, or
@@ -63,8 +70,11 @@ they let a user sign in:
   paths can fail for accounts without an Azure subscription. If browser login
   still fails, it automatically retries with Microsoft's device-code flow.
   When Microsoft setup fails during the full wizard, the other providers
-  continue instead of being abandoned. If a tenant administrator creates the
-  application instead, save its Application (client) ID and continue directly:
+  continue instead of being abandoned. A personal Outlook/Hotmail login can
+  authorize DeskBob, but a consumer account does not own an Entra tenant and
+  therefore cannot create the OAuth application itself. Create the app from an
+  account with an Entra tenant, or have a tenant administrator create it, then
+  reuse that Application (client) ID for personal and work logins:
 
   ```powershell
   .\scripts\connect_accounts.ps1 -Provider microsoft -Account uoft -ClientId APPLICATION_ID
@@ -76,7 +86,9 @@ they let a user sign in:
   desktop OAuth client. Create a Desktop app client once, download its JSON,
   then run `.\scripts\connect_accounts.ps1 -GoogleClientJson .\client.json`.
   The JSON is imported into Windows Credential Manager and does not belong in
-  the repository.
+  the repository. Google OAuth apps left in external `Testing` status can issue
+  refresh tokens that expire after seven days; publish the consent screen for
+  durable personal use.
 - **Slack:** Slack requires a registered internal or Marketplace app and does
   not support dynamic client registration. Its registered redirect URL must be
   `http://localhost:53682`. After its client ID/secret are saved, the normal

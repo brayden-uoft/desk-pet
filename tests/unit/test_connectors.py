@@ -80,6 +80,53 @@ def test_oauth_loader_labels_multiple_google_accounts_separately() -> None:
     assert all("Account label:" in tool["server_description"] for tool in tools)
 
 
+def test_personal_microsoft_session_exposes_only_outlook() -> None:
+    store = MemoryCredentialStore()
+    store.save(
+        _session(
+            "microsoft:personal",
+            "personal-token",
+            scopes=("Mail.Read", "Calendars.Read"),
+        )
+    )
+    loader = OAuthConnectorLoader(OAuthManager(store, _UnusedHTTP()), {})
+
+    tools = asyncio.run(loader())
+
+    assert [tool["server_label"] for tool in tools] == [
+        "outlook_calendar_personal",
+        "outlook_email_personal",
+    ]
+
+
+def test_work_teams_session_exposes_only_scoped_microsoft_connectors() -> None:
+    store = MemoryCredentialStore()
+    store.save(
+        _session(
+            "microsoft:uoft",
+            "work-token",
+            scopes=(
+                "Mail.Read",
+                "Calendars.Read",
+                "Files.Read.All",
+                "Sites.Read.All",
+                "Chat.Read",
+                "ChannelMessage.Read.All",
+            ),
+        )
+    )
+    loader = OAuthConnectorLoader(OAuthManager(store, _UnusedHTTP()), {})
+
+    tools = asyncio.run(loader())
+
+    assert [tool["server_label"] for tool in tools] == [
+        "outlook_calendar_uoft",
+        "outlook_email_uoft",
+        "sharepoint_uoft",
+        "microsoft_teams_uoft",
+    ]
+
+
 def test_oauth_loader_adds_read_only_notion_remote_mcp() -> None:
     store = MemoryCredentialStore()
     store.save(_session("notion", "notion-token"))
@@ -119,13 +166,18 @@ def test_github_uses_server_enforced_read_only_endpoint() -> None:
     assert "allowed_tools" not in github
 
 
-def _session(provider: str, access_token: str) -> OAuthSession:
+def _session(
+    provider: str,
+    access_token: str,
+    *,
+    scopes: tuple[str, ...] = (),
+) -> OAuthSession:
     return OAuthSession(
         provider=provider,
         client_id="client-id",
         authorization_endpoint="https://example.test/authorize",
         token_endpoint="https://example.test/token",
-        scopes=(),
+        scopes=scopes,
         access_token=access_token,
         refresh_token=None,
         expires_at=None,

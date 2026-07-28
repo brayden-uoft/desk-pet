@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import urllib.parse
 from collections.abc import Mapping
+from http import server as http_server
 from typing import Any
 
+import pytest
+
 from desk_pet.auth.models import OAuthClient, OAuthSession
-from desk_pet.auth.oauth import OAuthManager
+from desk_pet.auth.oauth import LoopbackAuthorizationBrowser, OAuthFlowError, OAuthManager
 from desk_pet.auth.store import MemoryCredentialStore
 
 
@@ -88,3 +91,63 @@ def test_browser_oauth_uses_pkce_stores_and_refreshes_session() -> None:
         "refresh_token": "refresh",
         "client_id": "desktop-client",
     }
+
+
+def test_slack_user_access_response_uses_top_level_token() -> None:
+    store = MemoryCredentialStore()
+    http = FakeHTTP()
+    http.responses = [
+        {
+            "ok": True,
+            "access_token": "xoxp-user",
+            "refresh_token": "xoxe-refresh",
+            "expires_in": 43_200,
+            "token_type": "user",
+            "authed_user": {"id": "U123"},
+        }
+    ]
+    manager = OAuthManager(store, http, clock=lambda: 1_000)
+    client = OAuthClient(
+        provider="slack",
+        client_id="slack-client",
+        client_secret="slack-secret",
+        authorization_endpoint="https://slack.com/oauth/v2_user/authorize",
+        token_endpoint="https://slack.com/api/oauth.v2.user.access",
+        scopes=("search:read.public",),
+    )
+
+    session = manager.connect(client, FakeBrowser())
+
+    assert session.access_token == "xoxp-user"
+    assert session.refresh_token == "xoxe-refresh"
+    assert session.expires_at == 44_200
+
+
+def test_empty_scope_is_omitted_for_discovered_mcp_oauth() -> None:
+    store = MemoryCredentialStore()
+    http = FakeHTTP()
+    browser = FakeBrowser()
+    client = OAuthClient(
+        provider="notion",
+        client_id="dynamic-client",
+        authorization_endpoint="https://example.test/authorize",
+        token_endpoint="https://example.test/token",
+        scopes=(),
+    )
+
+    OAuthManager(store, http).connect(client, browser)
+
+    query = urllib.parse.parse_qs(urllib.parse.urlparse(browser.url).query)
+    assert "scope" not in query
+
+
+def test_busy_fixed_callback_port_has_actionable_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_server(*_args: object, **_kwargs: object) -> object:
+        raise OSError("address already in use")
+
+    monkeypatch.setattr(http_server, "ThreadingHTTPServer", fail_server)
+
+    with pytest.raises(OAuthFlowError, match="port 53682"):
+        LoopbackAuthorizationBrowser(port=53682)
