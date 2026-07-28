@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "connect_accounts.ps1"
+pytestmark = pytest.mark.skipif(
+    shutil.which("powershell") is None,
+    reason="The account wrapper is Windows PowerShell-specific.",
+)
 
 
 def _dry_run(*arguments: str) -> subprocess.CompletedProcess[str]:

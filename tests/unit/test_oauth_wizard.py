@@ -35,3 +35,11 @@ def test_status_lists_named_accounts_without_printing_tokens(
     assert "google:uoft" in output
     assert "secret-token" not in output
     assert "secret-refresh" not in output
+
+
+def test_unknown_provider_is_rejected(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as raised:
+        run(["g"])
+
+    assert raised.value.code == 2
+    assert "unknown provider 'g'" in capsys.readouterr().err

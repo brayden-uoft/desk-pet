@@ -49,7 +49,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "providers",
         nargs="*",
-        choices=PROVIDERS,
+        metavar="PROVIDER",
         help="Providers to connect. The default is every provider.",
     )
     parser.add_argument("--status", action="store_true", help="Show connection status.")
@@ -258,16 +258,22 @@ def run(
     store: CredentialStore | None = None,
     environment: Mapping[str, str] | None = None,
 ) -> int:
-    args = _parser().parse_args(argv)
+    parser = _parser()
+    args = parser.parse_args(argv)
+    unknown_providers = [provider for provider in args.providers if provider not in PROVIDERS]
+    if unknown_providers:
+        parser.error(
+            f"unknown provider {unknown_providers[0]!r}; choose from {', '.join(PROVIDERS)}"
+        )
     try:
         account = _normalize_account(args.account)
     except OAuthFlowError as exc:
-        _parser().error(str(exc))
+        parser.error(str(exc))
     account_targets = [*args.providers]
     if args.disconnect:
         account_targets.append(args.disconnect)
     if account and any(provider not in MULTI_ACCOUNT_PROVIDERS for provider in account_targets):
-        _parser().error("--account can only be used with Google or Microsoft.")
+        parser.error("--account can only be used with Google or Microsoft.")
     load_dotenv()
     values = os.environ if environment is None else environment
     credentials = store or KeyringCredentialStore()
