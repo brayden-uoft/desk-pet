@@ -63,8 +63,21 @@ function Initialize-MicrosoftOAuth {
     }
 
     Write-Host "`nA Microsoft sign-in page will open. Sign in to the account DeskBob should read."
+    Write-Host "Configuring Azure CLI to avoid the Windows broker and subscription-selector bugs..."
+    & $Az.Source account clear
+    & $Az.Source config set core.enable_broker_on_windows=false core.login_experience_v2=off
+    if ($LASTEXITCODE -ne 0) {
+        throw "Azure CLI could not apply its browser-login compatibility settings."
+    }
     & $Az.Source login --allow-no-subscriptions
-    if ($LASTEXITCODE -ne 0) { throw "Microsoft sign-in was not completed." }
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "Browser login failed. Falling back to Microsoft's device-code login."
+        & $Az.Source account clear
+        & $Az.Source login --allow-no-subscriptions --use-device-code
+    }
+    if ($LASTEXITCODE -ne 0) {
+        throw "Microsoft sign-in was not completed after browser and device-code attempts."
+    }
     $ClientId = & $Az.Source ad app create `
         --display-name "DeskBob Local" `
         --sign-in-audience AzureADandPersonalMicrosoftAccount `
@@ -90,7 +103,14 @@ if ($Provider -eq "all") {
 }
 
 if ($Requested -contains "microsoft") {
-    Initialize-MicrosoftOAuth
+    try {
+        Initialize-MicrosoftOAuth
+    } catch {
+        if ($Provider -eq "microsoft") { throw }
+        Write-Warning "Skipping Microsoft for this run: $($_.Exception.Message)"
+        Write-Warning "The remaining account providers will still be processed."
+        $Requested = @($Requested | Where-Object { $_ -ne "microsoft" })
+    }
 }
 
 if ($Provider -in @("google", "microsoft") -and -not $Account) {

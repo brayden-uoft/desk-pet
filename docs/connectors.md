@@ -58,7 +58,12 @@ they let a user sign in:
 - **Microsoft:** the script installs Azure CLI if needed, opens Microsoft
   sign-in, and attempts to register the local public client automatically.
   University tenants can block user-created apps or require administrator
-  consent for Teams/SharePoint scopes.
+  consent for Teams/SharePoint scopes. The script disables Azure CLI's Windows
+  authentication broker and subscription selector before login because those
+  paths can fail for accounts without an Azure subscription. If browser login
+  still fails, it automatically retries with Microsoft's device-code flow.
+  When Microsoft setup fails during the full wizard, the other providers
+  continue instead of being abandoned.
 - **Notion:** supports dynamic client registration, so its flow is fully
   automatic apart from sign-in and consent.
 - **GitHub:** reuses `gh auth`; no app registration or copied token is needed.
