@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 import desk_pet.auth.store as store_module
@@ -70,3 +72,21 @@ def test_keyring_store_persists_named_account_index(
         "google:personal",
         "google:uoft",
     ]
+
+
+def test_legacy_github_session_with_empty_endpoints_is_repaired_on_load(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    keyring = FakeKeyring()
+    legacy = _session("github").to_dict()
+    legacy["authorization_endpoint"] = ""
+    legacy["token_endpoint"] = ""
+
+    keyring.set_password("test", "github", json.dumps(legacy))
+    monkeypatch.setattr(store_module, "_keyring", lambda: keyring)
+
+    session = KeyringCredentialStore(service_name="test").load("github")
+
+    assert session is not None
+    assert session.authorization_endpoint == "https://github.com/login/oauth/authorize"
+    assert session.token_endpoint == "https://github.com/login/oauth/access_token"

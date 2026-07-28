@@ -123,7 +123,11 @@ def _show_status(store: CredentialStore, environment: Mapping[str, str]) -> None
     print("\nDeskBob account status")
     print("----------------------")
     for provider in PROVIDERS:
-        sessions = store.list_sessions(provider)
+        try:
+            sessions = store.list_sessions(provider)
+        except CredentialStoreError as exc:
+            print(f"{provider:24} saved credential is invalid: {exc}")
+            continue
         if sessions:
             for session in sessions:
                 account = _account_from_session_key(provider, session.provider)
@@ -146,6 +150,11 @@ def _connect_provider(
     environment: Mapping[str, str],
     account: str | None,
 ) -> bool:
+    session_key = _session_key(provider, account)
+    if store.load(session_key) is not None:
+        display = provider.title() if account is None else f"{provider.title()} [{account}]"
+        print(f"\n[OK] {display} is already connected.")
+        return True
     if provider == "github":
         return _connect_github_cli(store)
     fixed_ports = {"slack": 53682, "dropbox": 53683}
@@ -209,8 +218,8 @@ def _connect_github_cli(store: CredentialStore) -> bool:
         OAuthSession(
             provider="github",
             client_id="github-cli",
-            authorization_endpoint="",
-            token_endpoint="",
+            authorization_endpoint="https://github.com/login/oauth/authorize",
+            token_endpoint="https://github.com/login/oauth/access_token",
             scopes=(),
             access_token=token,
             refresh_token=None,

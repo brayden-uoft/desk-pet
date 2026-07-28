@@ -52,12 +52,24 @@ class OAuthSession:
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> OAuthSession:
+        provider = _required_string(value, "provider")
+        authorization_endpoint = _optional_string(value.get("authorization_endpoint"))
+        token_endpoint = _optional_string(value.get("token_endpoint"))
+        if provider == "github":
+            authorization_endpoint = (
+                authorization_endpoint or "https://github.com/login/oauth/authorize"
+            )
+            token_endpoint = token_endpoint or "https://github.com/login/oauth/access_token"
+        if not authorization_endpoint:
+            raise ValueError("Stored OAuth session is missing authorization_endpoint.")
+        if not token_endpoint:
+            raise ValueError("Stored OAuth session is missing token_endpoint.")
         return cls(
-            provider=_required_string(value, "provider"),
+            provider=provider,
             client_id=_required_string(value, "client_id"),
             client_secret=_optional_string(value.get("client_secret")),
-            authorization_endpoint=_required_string(value, "authorization_endpoint"),
-            token_endpoint=_required_string(value, "token_endpoint"),
+            authorization_endpoint=authorization_endpoint,
+            token_endpoint=token_endpoint,
             scopes=tuple(_string_list(value.get("scopes"))),
             access_token=_required_string(value, "access_token"),
             refresh_token=_optional_string(value.get("refresh_token")),
