@@ -22,6 +22,30 @@ Mail, Outlook Calendar, Teams, SharePoint, and OneDrive. Notion uses its
 official hosted MCP server. Dropbox uses the OpenAI-maintained connector. Slack
 uses Slack's official hosted MCP server.
 
+## Multiple Google and Microsoft accounts
+
+Run the wizard once per account. If `-Account` is omitted for an individual
+Google or Microsoft setup, the script asks for a short label:
+
+```powershell
+.\scripts\connect_accounts.ps1 -Provider google -Account personal
+.\scripts\connect_accounts.ps1 -Provider google -Account uoft
+.\scripts\connect_accounts.ps1 -Provider microsoft -Account personal
+.\scripts\connect_accounts.ps1 -Provider microsoft -Account uoft
+```
+
+The OAuth application registration is reused, but each login gets an
+independent encrypted access/refresh-token session. Status shows every account:
+
+```powershell
+.\scripts\connect_accounts.ps1 -Provider status
+```
+
+DeskBob exposes account-qualified tools such as `gmail_personal`,
+`gmail_uoft`, `outlook_calendar_personal`, and `outlook_calendar_uoft`. The
+account label is also included in each tool description so DeskBob can choose
+the right account or search both.
+
 Only explicitly listed read operations are exposed. DeskBob cannot send mail,
 change calendar events, post Slack messages, edit documents, move files, or
 delete anything in this stage.

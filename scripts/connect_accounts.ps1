@@ -2,7 +2,8 @@ param(
     [ValidateSet("all", "github", "google", "microsoft", "notion", "slack", "dropbox", "status")]
     [string]$Provider = "all",
     [string]$GoogleClientJson = "",
-    [string]$ClientId = ""
+    [string]$ClientId = "",
+    [string]$Account = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -48,7 +49,7 @@ if ($ClientId) {
 
 function Initialize-MicrosoftOAuth {
     $Status = & $Python -m desk_pet.auth.wizard --status
-    if ($Status -match "microsoft\s+(connected|ready to sign in)") { return }
+    if ($Status -match "microsoft(?::\S+)?\s+(connected|ready to sign in)") { return }
 
     $Az = Get-Command az -ErrorAction SilentlyContinue
     if (-not $Az) {
@@ -92,7 +93,16 @@ if ($Requested -contains "microsoft") {
     Initialize-MicrosoftOAuth
 }
 
+if ($Provider -in @("google", "microsoft") -and -not $Account) {
+    Write-Host "`nGive this login a short label so DeskBob can distinguish it."
+    Write-Host "Examples: personal, uoft, work"
+    $Account = Read-Host "Account label"
+    if (-not $Account) { throw "An account label is required." }
+}
+
 Write-Host "`nDeskBob account connector wizard"
 Write-Host "Only provider sign-in and consent pages will receive your passwords."
-& $Python -m desk_pet.auth.wizard @Requested
+$WizardArguments = @("-m", "desk_pet.auth.wizard") + $Requested
+if ($Account) { $WizardArguments += @("--account", $Account) }
+& $Python @WizardArguments
 exit $LASTEXITCODE

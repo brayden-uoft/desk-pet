@@ -7,6 +7,7 @@ from typing import Any, Protocol, cast
 from desk_pet.auth.models import OAuthClientRegistration, OAuthSession
 
 SERVICE_NAME = "DeskBob OAuth"
+SESSION_INDEX_USERNAME = "session-index"
 
 
 class CredentialStoreError(RuntimeError):
@@ -20,6 +21,8 @@ class CredentialStore(Protocol):
 
     def delete(self, provider: str) -> None: ...
 
+    def list_sessions(self, provider: str) -> list[OAuthSession]: ...
+
     def load_client(self, provider: str) -> OAuthClientRegistration | None: ...
 
     def save_client(self, registration: OAuthClientRegistration) -> None: ...
@@ -32,11 +35,7 @@ class KeyringCredentialStore:
         self._service_name = service_name
 
     def load(self, provider: str) -> OAuthSession | None:
-        keyring = _keyring()
-        try:
-            encoded = keyring.get_password(self._service_name, provider)
-        except Exception as exc:
-            raise CredentialStoreError("Windows Credential Manager could not be read.") from exc
+        encoded = self._get(provider)
         if not encoded:
             return None
         try:
@@ -50,12 +49,11 @@ class KeyringCredentialStore:
             ) from exc
 
     def save(self, session: OAuthSession) -> None:
-        keyring = _keyring()
         encoded = json.dumps(session.to_dict(), separators=(",", ":"), sort_keys=True)
-        try:
-            keyring.set_password(self._service_name, session.provider, encoded)
-        except Exception as exc:
-            raise CredentialStoreError("Windows Credential Manager could not be updated.") from exc
+        self._set(session.provider, encoded)
+        keys = set(self._session_keys())
+        keys.add(session.provider)
+        self._save_session_keys(keys)
 
     def delete(self, provider: str) -> None:
         keyring = _keyring()
@@ -67,6 +65,18 @@ class KeyringCredentialStore:
                 raise CredentialStoreError(
                     "Windows Credential Manager could not remove the account."
                 ) from exc
+        keys = set(self._session_keys())
+        keys.discard(provider)
+        self._save_session_keys(keys)
+
+    def list_sessions(self, provider: str) -> list[OAuthSession]:
+        keys = {
+            key for key in self._session_keys() if key == provider or key.startswith(f"{provider}:")
+        }
+        # Sessions created before multi-account support are not in the index.
+        if self.load(provider) is not None:
+            keys.add(provider)
+        return [session for key in sorted(keys) if (session := self.load(key)) is not None]
 
     def load_client(self, provider: str) -> OAuthClientRegistration | None:
         encoded = self._get(f"client:{provider}")
@@ -104,6 +114,21 @@ class KeyringCredentialStore:
         except Exception as exc:
             raise CredentialStoreError("Windows Credential Manager could not be updated.") from exc
 
+    def _session_keys(self) -> list[str]:
+        encoded = self._get(SESSION_INDEX_USERNAME)
+        if not encoded:
+            return []
+        try:
+            parsed = json.loads(encoded)
+        except json.JSONDecodeError as exc:
+            raise CredentialStoreError("The saved OAuth account index is invalid.") from exc
+        if not isinstance(parsed, list) or not all(isinstance(item, str) for item in parsed):
+            raise CredentialStoreError("The saved OAuth account index is invalid.")
+        return parsed
+
+    def _save_session_keys(self, keys: set[str]) -> None:
+        self._set(SESSION_INDEX_USERNAME, json.dumps(sorted(keys), separators=(",", ":")))
+
 
 class MemoryCredentialStore:
     """In-memory store used by tests and simulated setup flows."""
@@ -120,6 +145,13 @@ class MemoryCredentialStore:
 
     def delete(self, provider: str) -> None:
         self.sessions.pop(provider, None)
+
+    def list_sessions(self, provider: str) -> list[OAuthSession]:
+        return [
+            session
+            for key, session in sorted(self.sessions.items())
+            if key == provider or key.startswith(f"{provider}:")
+        ]
 
     def load_client(self, provider: str) -> OAuthClientRegistration | None:
         return self.clients.get(provider)

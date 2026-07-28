@@ -172,6 +172,9 @@ class OAuthManager:
             self._store.save(refreshed)
             return refreshed.access_token
 
+    def sessions(self, provider: str) -> list[OAuthSession]:
+        return self._store.list_sessions(provider)
+
     def _refresh(self, session: OAuthSession) -> OAuthSession:
         assert session.refresh_token is not None
         parameters = {

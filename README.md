@@ -105,7 +105,7 @@ Notion, Slack, and Dropbox with the guided browser OAuth wizard:
 
 Tokens are refreshable and stored in Windows Credential Manager. See
 [external connectors](docs/connectors.md) for the few provider-enforced
-one-time app-registration constraints.
+one-time app-registration constraints and named multi-account setup.
 
 To inspect the Windows audio devices and the current defaults:
 

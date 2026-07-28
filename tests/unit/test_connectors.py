@@ -57,6 +57,29 @@ def test_oauth_loader_expands_one_google_login_into_three_connectors() -> None:
     assert all(tool["authorization"] == "google-token" for tool in tools)
 
 
+def test_oauth_loader_labels_multiple_google_accounts_separately() -> None:
+    store = MemoryCredentialStore()
+    store.save(_session("google:personal", "personal-token"))
+    store.save(_session("google:uoft", "uoft-token"))
+    loader = OAuthConnectorLoader(OAuthManager(store, _UnusedHTTP()), {})
+
+    tools = asyncio.run(loader())
+
+    assert [tool["server_label"] for tool in tools] == [
+        "gmail_personal",
+        "google_calendar_personal",
+        "google_drive_personal",
+        "gmail_uoft",
+        "google_calendar_uoft",
+        "google_drive_uoft",
+    ]
+    assert {tool["authorization"] for tool in tools} == {
+        "personal-token",
+        "uoft-token",
+    }
+    assert all("Account label:" in tool["server_description"] for tool in tools)
+
+
 def test_oauth_loader_adds_read_only_notion_remote_mcp() -> None:
     store = MemoryCredentialStore()
     store.save(_session("notion", "notion-token"))

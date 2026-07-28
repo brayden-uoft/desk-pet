@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -25,6 +27,8 @@ from desk_pet.auth.providers import (
 from desk_pet.auth.store import CredentialStore, CredentialStoreError, KeyringCredentialStore
 
 PROVIDERS = ("github", "google", "microsoft", "notion", "slack", "dropbox")
+MULTI_ACCOUNT_PROVIDERS = frozenset({"google", "microsoft"})
+ACCOUNT_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 FACTORIES: dict[
     str,
     Callable[[Mapping[str, str] | None, OAuthClientRegistration | None], OAuthClient],
@@ -47,6 +51,10 @@ def _parser() -> argparse.ArgumentParser:
         help="Providers to connect. The default is every provider.",
     )
     parser.add_argument("--status", action="store_true", help="Show connection status.")
+    parser.add_argument(
+        "--account",
+        help="Short account label for Google or Microsoft, such as personal or uoft.",
+    )
     parser.add_argument(
         "--disconnect",
         choices=PROVIDERS,
@@ -115,18 +123,19 @@ def _show_status(store: CredentialStore, environment: Mapping[str, str]) -> None
     print("\nDeskBob account status")
     print("----------------------")
     for provider in PROVIDERS:
-        connected = store.load(provider) is not None
+        sessions = store.list_sessions(provider)
+        if sessions:
+            for session in sessions:
+                account = _account_from_session_key(provider, session.provider)
+                display = provider if account is None else f"{provider}:{account}"
+                print(f"{display:24} connected")
+            continue
         if provider in {"github", "notion"}:
             registration = True
         else:
             registration = _load_registration(provider, store, environment) is not None
-        if connected:
-            detail = "connected"
-        elif registration:
-            detail = "ready to sign in"
-        else:
-            detail = "needs one-time OAuth app setup"
-        print(f"{provider:10} {detail}")
+        detail = "ready to sign in" if registration else "needs one-time OAuth app setup"
+        print(f"{provider:24} {detail}")
 
 
 def _connect_provider(
@@ -135,6 +144,7 @@ def _connect_provider(
     manager: OAuthManager,
     http: UrllibOAuthHTTPClient,
     environment: Mapping[str, str],
+    account: str | None,
 ) -> bool:
     if provider == "github":
         return _connect_github_cli(store)
@@ -152,10 +162,13 @@ def _connect_provider(
             print(f"Setup page: {spec.setup_url}")
             return False
         client = FACTORIES[provider](environment, registration)
+        if account is not None:
+            client = dataclasses.replace(client, provider=f"{provider}:{account}")
         server_url = "https://mcp.slack.com/mcp" if provider == "slack" else None
-    print(f"\nOpening {provider.title()} sign-in...")
+    display = provider.title() if account is None else f"{provider.title()} [{account}]"
+    print(f"\nOpening {display} sign-in...")
     manager.connect(client, browser, server_url=server_url)
-    print(f"[OK] {provider.title()} connected. Tokens are in Windows Credential Manager.")
+    print(f"[OK] {display} connected. Tokens are in Windows Credential Manager.")
     return True
 
 
@@ -216,6 +229,15 @@ def run(
     environment: Mapping[str, str] | None = None,
 ) -> int:
     args = _parser().parse_args(argv)
+    try:
+        account = _normalize_account(args.account)
+    except OAuthFlowError as exc:
+        _parser().error(str(exc))
+    account_targets = [*args.providers]
+    if args.disconnect:
+        account_targets.append(args.disconnect)
+    if account and any(provider not in MULTI_ACCOUNT_PROVIDERS for provider in account_targets):
+        _parser().error("--account can only be used with Google or Microsoft.")
     load_dotenv()
     values = os.environ if environment is None else environment
     credentials = store or KeyringCredentialStore()
@@ -236,8 +258,9 @@ def run(
             )
             print(f"[OK] {provider.title()} OAuth app saved securely.")
         if args.disconnect:
-            credentials.delete(args.disconnect)
-            print(f"[OK] {args.disconnect.title()} account disconnected.")
+            session_key = _session_key(args.disconnect, account)
+            credentials.delete(session_key)
+            print(f"[OK] {session_key} account disconnected.")
         if args.status:
             _show_status(credentials, values)
             return 0
@@ -252,7 +275,15 @@ def run(
         missing: list[str] = []
         for provider in requested:
             try:
-                if not _connect_provider(provider, credentials, manager, http, values):
+                provider_account = account if provider in MULTI_ACCOUNT_PROVIDERS else None
+                if not _connect_provider(
+                    provider,
+                    credentials,
+                    manager,
+                    http,
+                    values,
+                    provider_account,
+                ):
                     missing.append(provider)
             except (OAuthFlowError, RuntimeError) as exc:
                 print(f"[FAILED] {provider.title()}: {exc}", file=sys.stderr)
@@ -273,6 +304,26 @@ def run(
 
 def main() -> None:
     raise SystemExit(run())
+
+
+def _normalize_account(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip().lower().replace(" ", "-")
+    if not ACCOUNT_PATTERN.fullmatch(normalized):
+        raise OAuthFlowError(
+            "Account labels must be 1-32 lowercase letters, numbers, hyphens, or underscores."
+        )
+    return normalized
+
+
+def _session_key(provider: str, account: str | None) -> str:
+    return provider if account is None else f"{provider}:{account}"
+
+
+def _account_from_session_key(provider: str, session_key: str) -> str | None:
+    prefix = f"{provider}:"
+    return session_key[len(prefix) :] if session_key.startswith(prefix) else None
 
 
 if __name__ == "__main__":

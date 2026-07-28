@@ -205,17 +205,30 @@ class OAuthConnectorLoader:
         enabled_labels = {tool["server_label"] for tool in tools}
         for provider, labels in PROVIDER_CONNECTORS.items():
             try:
-                authorization = self._manager.access_token(provider)
+                sessions = self._manager.sessions(provider)
             except CredentialStoreError:
-                authorization = None
-            if not authorization:
-                continue
-            for label in labels:
-                if label in enabled_labels:
+                sessions = []
+            for session in sessions:
+                try:
+                    authorization = self._manager.access_token(session.provider)
+                except CredentialStoreError:
+                    authorization = None
+                if not authorization:
                     continue
-                spec = by_label[label]
-                tools.append(_connector_tool(spec, authorization))
-                enabled_labels.add(label)
+                account = _account_from_session_key(provider, session.provider)
+                for label in labels:
+                    server_label = label if account is None else f"{label}_{account}"
+                    if server_label in enabled_labels:
+                        continue
+                    spec = by_label[label]
+                    tools.append(
+                        _connector_tool(
+                            spec,
+                            authorization,
+                            account=account,
+                        )
+                    )
+                    enabled_labels.add(server_label)
         for provider, template in REMOTE_MCP_SPECS.items():
             try:
                 authorization = self._manager.access_token(provider)
@@ -229,13 +242,27 @@ class OAuthConnectorLoader:
         return tools
 
 
-def _connector_tool(spec: ConnectorSpec, authorization: str) -> MCPConnectorTool:
+def _connector_tool(
+    spec: ConnectorSpec,
+    authorization: str,
+    *,
+    account: str | None = None,
+) -> MCPConnectorTool:
+    label = spec.label if account is None else f"{spec.label}_{account}"
+    description = (
+        spec.description if account is None else f"{spec.description} Account label: {account}."
+    )
     return MCPConnectorTool(
         type="mcp",
-        server_label=spec.label,
-        server_description=spec.description,
+        server_label=label,
+        server_description=description,
         connector_id=spec.connector_id,
         authorization=authorization,
         require_approval="never",
         allowed_tools=list(spec.read_only_tools),
     )
+
+
+def _account_from_session_key(provider: str, session_key: str) -> str | None:
+    prefix = f"{provider}:"
+    return session_key[len(prefix) :] if session_key.startswith(prefix) else None
