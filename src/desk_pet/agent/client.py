@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol, cast
 
@@ -8,7 +8,7 @@ from openai import AsyncOpenAI
 
 from desk_pet.agent.prompts import DESK_PET_INSTRUCTIONS
 from desk_pet.agent.tool_protocol import (
-    MCPConnectorTool,
+    MCPTool,
     ModelTool,
     ModelTurn,
     ToolCall,
@@ -74,7 +74,8 @@ class OpenAIModelClient:
         maximum_output_tokens: int,
         web_search_enabled: bool = False,
         web_search_context_size: Literal["low", "medium", "high"] = "low",
-        connector_tools: Sequence[MCPConnectorTool] = (),
+        connector_tools: Sequence[MCPTool] = (),
+        connector_loader: Callable[[], Awaitable[Sequence[MCPTool]]] | None = None,
         instructions: str = DESK_PET_INSTRUCTIONS,
         responses: _ResponsesAPI | None = None,
     ) -> None:
@@ -88,6 +89,7 @@ class OpenAIModelClient:
         self._web_search_enabled = web_search_enabled
         self._web_search_context_size = web_search_context_size
         self._connector_tools = list(connector_tools)
+        self._connector_loader = connector_loader
         self._instructions = instructions
 
     async def create_response(
@@ -104,6 +106,8 @@ class OpenAIModelClient:
                 )
             )
         model_tools.extend(self._connector_tools)
+        if self._connector_loader is not None:
+            model_tools.extend(await self._connector_loader())
 
         response = await self._responses.create(
             model=self._model,

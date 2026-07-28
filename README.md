@@ -96,6 +96,17 @@ Typed input remains available:
 .\scripts\run_windows.ps1 -Mode text
 ```
 
+Connect GitHub, Gmail, Google Calendar, Drive, Outlook, Teams, SharePoint,
+Notion, Slack, and Dropbox with the guided browser OAuth wizard:
+
+```powershell
+.\scripts\connect_accounts.ps1
+```
+
+Tokens are refreshable and stored in Windows Credential Manager. See
+[external connectors](docs/connectors.md) for the few provider-enforced
+one-time app-registration constraints.
+
 To inspect the Windows audio devices and the current defaults:
 
 ```powershell

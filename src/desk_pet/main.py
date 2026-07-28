@@ -13,13 +13,16 @@ from typing import Literal, TypeVar, cast
 from dotenv import load_dotenv
 
 from desk_pet.agent.client import OpenAIModelClient
-from desk_pet.agent.connectors import connector_tools_from_environment
+from desk_pet.agent.connectors import OAuthConnectorLoader, connector_tools_from_environment
 from desk_pet.agent.loop import AgentLoop
 from desk_pet.agent.prompts import DESK_PET_INSTRUCTIONS
 from desk_pet.audio.errors import AudioCancelled, AudioError
 from desk_pet.audio.openai_services import OpenAISpeechSynthesizer, OpenAITranscriptionService
 from desk_pet.audio.speech_text import text_for_speech
 from desk_pet.audio.thinking import ThinkingAudio, ThinkingAudioController
+from desk_pet.auth.http import UrllibOAuthHTTPClient
+from desk_pet.auth.oauth import OAuthManager
+from desk_pet.auth.store import CredentialStoreError, KeyringCredentialStore
 from desk_pet.config import AppConfig, ConfigError, load_config
 from desk_pet.conversation import ConversationError, ConversationService
 from desk_pet.events import Event, EventBus, EventType
@@ -262,6 +265,13 @@ def build_application(
     instructions = DESK_PET_INSTRUCTIONS + build_context_instructions(runtime_context)
 
     connector_tools = connector_tools_from_environment()
+    connector_loader: OAuthConnectorLoader | None = None
+    try:
+        connector_loader = OAuthConnectorLoader(
+            OAuthManager(KeyringCredentialStore(), UrllibOAuthHTTPClient())
+        )
+    except CredentialStoreError:
+        LOGGER.warning("Secure OAuth account storage is unavailable")
     if connector_tools:
         LOGGER.info(
             "Enabled read-only connectors: %s",
@@ -275,6 +285,7 @@ def build_application(
         web_search_enabled=config.agent.web_search_enabled,
         web_search_context_size=config.agent.web_search_context_size,
         connector_tools=connector_tools,
+        connector_loader=connector_loader,
         instructions=instructions,
     )
     events = EventBus()

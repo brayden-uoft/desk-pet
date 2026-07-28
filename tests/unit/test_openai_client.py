@@ -145,6 +145,43 @@ def test_openai_client_adds_configured_connector_tools() -> None:
     assert responses.arguments["tools"] == [connector]
 
 
+def test_openai_client_reloads_connector_tools_for_every_request() -> None:
+    responses = FakeResponsesAPI()
+    calls = 0
+
+    async def load_connectors() -> list[MCPConnectorTool]:
+        nonlocal calls
+        calls += 1
+        return [
+            MCPConnectorTool(
+                type="mcp",
+                server_label="gmail",
+                server_description="Read mail.",
+                connector_id="connector_gmail",
+                authorization=f"token-{calls}",
+                require_approval="never",
+                allowed_tools=["search_emails"],
+            )
+        ]
+
+    client = OpenAIModelClient(
+        model="test-model",
+        reasoning_effort="low",
+        request_timeout_seconds=10,
+        maximum_output_tokens=250,
+        connector_loader=load_connectors,
+        responses=responses,
+    )
+
+    asyncio.run(client.create_response([{"role": "user", "content": "Mail?"}], []))
+    first_token = responses.arguments["tools"][0]["authorization"]
+    asyncio.run(client.create_response([{"role": "user", "content": "Again?"}], []))
+
+    assert calls == 2
+    assert first_token == "token-1"
+    assert responses.arguments["tools"][0]["authorization"] == "token-2"
+
+
 def test_openai_client_uses_supplied_runtime_instructions() -> None:
     responses = FakeResponsesAPI()
     client = OpenAIModelClient(

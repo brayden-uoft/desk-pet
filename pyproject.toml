@@ -16,6 +16,7 @@ dependencies = [
 
 [project.optional-dependencies]
 desktop = [
+    "keyring>=25,<26",
     "numpy>=2,<2.4",
     "opencv-python-headless>=4.10,<5",
     "sounddevice>=0.5,<1",
