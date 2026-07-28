@@ -11,6 +11,15 @@ def test_markdown_links_keep_labels_but_drop_urls() -> None:
     assert text_for_speech(text) == "The update came from Reuters and AP."
 
 
+def test_parenthesized_source_citations_are_entirely_silent() -> None:
+    text = (
+        "Wildfires remain a concern. "
+        "([Reuters](https://proxy.example/default/https/www.reuters.com/))"
+    )
+
+    assert text_for_speech(text) == "Wildfires remain a concern."
+
+
 def test_bare_and_angle_bracket_urls_are_not_spoken() -> None:
     text = "Details: https://example.com/very/long/path and <https://other.example/news>."
 

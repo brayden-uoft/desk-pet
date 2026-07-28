@@ -206,7 +206,7 @@ def test_voice_keeps_citations_on_screen_but_does_not_speak_urls(tmp_path: Path)
         await trigger.send("exit")
         await run_task
 
-        assert synthesizer.texts == ["Rain is likely. Toronto forecast"]
+        assert synthesizer.texts == ["Rain is likely."]
         assert output[-1] == f"DeskBob> {cited_answer}"
 
     asyncio.run(scenario())

@@ -13,7 +13,7 @@ _EXCESS_BLANK_LINES = re.compile(r"\n{3,}")
 
 def text_for_speech(text: str) -> str:
     """Keep useful prose while removing URLs that TTS would laboriously spell."""
-    spoken = _PARENTHESIZED_MARKDOWN_LINK.sub(r"\1", text)
+    spoken = _PARENTHESIZED_MARKDOWN_LINK.sub("", text)
     spoken = _MARKDOWN_LINK.sub(r"\1", spoken)
     spoken = _AUTOLINK.sub(_remove_bare_url, spoken)
     spoken = _EMPTY_PARENS.sub("", spoken)
