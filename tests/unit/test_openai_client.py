@@ -2,7 +2,7 @@ import asyncio
 from typing import Any
 
 from desk_pet.agent.client import Message, OpenAIModelClient
-from desk_pet.agent.tool_protocol import ModelTool, ToolSchema
+from desk_pet.agent.tool_protocol import MCPConnectorTool, ModelTool, ToolSchema
 
 
 class FakeOutputItem:
@@ -117,9 +117,32 @@ def test_openai_client_adds_hosted_web_search_when_enabled() -> None:
 
     asyncio.run(client.create_response([{"role": "user", "content": "Toronto weather"}], []))
 
-    assert responses.arguments["tools"] == [
-        {"type": "web_search", "search_context_size": "medium"}
-    ]
+    assert responses.arguments["tools"] == [{"type": "web_search", "search_context_size": "medium"}]
+
+
+def test_openai_client_adds_configured_connector_tools() -> None:
+    responses = FakeResponsesAPI()
+    connector = MCPConnectorTool(
+        type="mcp",
+        server_label="google_calendar",
+        server_description="Read the calendar.",
+        connector_id="connector_googlecalendar",
+        authorization="secret-token",
+        require_approval="never",
+        allowed_tools=["search_events", "read_event"],
+    )
+    client = OpenAIModelClient(
+        model="test-model",
+        reasoning_effort="low",
+        request_timeout_seconds=10,
+        maximum_output_tokens=250,
+        connector_tools=[connector],
+        responses=responses,
+    )
+
+    asyncio.run(client.create_response([{"role": "user", "content": "Today?"}], []))
+
+    assert responses.arguments["tools"] == [connector]
 
 
 def test_openai_client_uses_supplied_runtime_instructions() -> None:

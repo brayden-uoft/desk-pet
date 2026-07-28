@@ -143,4 +143,6 @@ tool calls, and stops after five tool iterations.
 10. K2B preparation and physical-driver integration
 
 See [architecture](docs/architecture.md), [deployment](docs/deployment.md), and
-[safety](docs/safety.md) for design constraints.
+[safety](docs/safety.md) for design constraints. See
+[external connectors](docs/connectors.md) for the read-only Gmail, Google
+Calendar, Drive, Outlook, Teams, SharePoint, and Dropbox rollout.

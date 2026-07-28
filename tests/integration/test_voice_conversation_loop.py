@@ -171,6 +171,47 @@ def test_thinking_audio_does_not_block_response_work(tmp_path: Path) -> None:
     asyncio.run(scenario())
 
 
+def test_voice_keeps_citations_on_screen_but_does_not_speak_urls(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        trigger = QueueTrigger()
+        face = FakeFace()
+        recorder = PushToTalkRecorder()
+        synthesizer = FakeSynthesizer()
+        output: list[str] = []
+        cited_answer = (
+            "Rain is likely. ([Toronto forecast](https://weather.example/toronto/hourly))"
+        )
+        app = DeskPetApplication(
+            trigger,
+            face,
+            conversation=ConversationService(
+                model=FakeModelClient([cited_answer]),
+                store=ConversationStore(tmp_path / "citations.db"),
+                history_limit=20,
+                request_timeout_seconds=1,
+            ),
+            output=output.append,
+            interaction_mode="voice",
+            recorder=recorder,
+            transcriber=FakeTranscriber("Will it rain?"),
+            synthesizer=synthesizer,
+            player=FakePlayer(),
+        )
+
+        run_task = asyncio.create_task(app.run())
+        await trigger.send("listen_start")
+        await recorder.started.wait()
+        await trigger.send("listen_stop")
+        await _wait_for_state_count(face, 6)
+        await trigger.send("exit")
+        await run_task
+
+        assert synthesizer.texts == ["Rain is likely. Toronto forecast"]
+        assert output[-1] == f"DeskBob> {cited_answer}"
+
+    asyncio.run(scenario())
+
+
 def test_escape_cancels_recording_and_returns_to_idle(tmp_path: Path) -> None:
     async def scenario() -> None:
         trigger = QueueTrigger()
