@@ -263,13 +263,15 @@ def _get_or_start_outlook_application(client: Any) -> Any:
         )
         if executable is None:
             return client.Dispatch("Outlook.Application")
-        startup_info = subprocess.STARTUPINFO()
-        startup_info.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        subprocess_values = vars(subprocess)
+        startup_info_factory = subprocess_values["STARTUPINFO"]
+        startup_info = startup_info_factory()
+        startup_info.dwFlags |= int(subprocess_values["STARTF_USESHOWWINDOW"])
         startup_info.wShowWindow = 6  # SW_MINIMIZE
         subprocess.Popen(  # noqa: S603
             [str(executable), "/recycle"],
             startupinfo=startup_info,
-            creationflags=subprocess.CREATE_NO_WINDOW,
+            creationflags=int(subprocess_values["CREATE_NO_WINDOW"]),
         )
         for _ in range(20):
             try:
