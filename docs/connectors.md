@@ -1,57 +1,131 @@
 # External connectors
 
-DeskBob can attach OpenAI-maintained connectors to every Responses API request.
-A connector is enabled only when its OAuth access token is present in the local
-`.env` file. Tokens are sent with each request but are never committed, logged,
-stored in conversation history, or returned in the API response.
+DeskBob supports local Outlook Classic access plus browser-based OAuth,
+automatic token refresh, and secure storage in Windows Credential Manager.
+Start the guided wizard from PowerShell:
 
-## Supported services
-
-| Service | Environment variable | Access exposed to DeskBob |
-| --- | --- | --- |
-| Gmail | `DESKBOB_GMAIL_OAUTH_TOKEN` | Search and read mail |
-| Google Calendar | `DESKBOB_GOOGLE_CALENDAR_OAUTH_TOKEN` | Search and read events |
-| Google Drive | `DESKBOB_GOOGLE_DRIVE_OAUTH_TOKEN` | Search and read files |
-| Outlook Calendar | `DESKBOB_OUTLOOK_CALENDAR_OAUTH_TOKEN` | Search and read events |
-| Outlook Email | `DESKBOB_OUTLOOK_EMAIL_OAUTH_TOKEN` | Search and read mail |
-| Microsoft Teams | `DESKBOB_MICROSOFT_TEAMS_OAUTH_TOKEN` | Search and read messages |
-| SharePoint/OneDrive | `DESKBOB_SHAREPOINT_OAUTH_TOKEN` | Search and read documents |
-| Dropbox | `DESKBOB_DROPBOX_OAUTH_TOKEN` | Search and read files |
-
-Only explicitly enumerated read operations are exposed. Sending email, changing
-calendar events, editing documents, moving files, and deleting anything are not
-available in this stage.
-
-## First acceptance test: Google Calendar
-
-The initial connector demo uses a temporary OAuth access token. Generate a
-Google token with the Calendar Events scope, then add it only to `.env`:
-
-```dotenv
-DESKBOB_GOOGLE_CALENDAR_OAUTH_TOKEN=your-temporary-access-token
+```powershell
+.\scripts\connect_accounts.ps1
 ```
 
-Restart DeskBob and ask:
+The default wizard never enables provider billing or starts a trial. It uses
+permanent free access or each provider's standard free quotas. OpenAI API
+model and hosted-tool requests are still billed separately by OpenAI.
 
-> What is on my calendar today, and does anything affect what I should wear?
+The wizard installs local dependencies, opens provider sign-in/consent pages,
+and reports which accounts are connected. It never asks for an access token
+and never prints saved credentials. Check status later with:
 
-DeskBob should use the calendar connector and web weather search, then give one
-combined answer. Remove the token from `.env` to disconnect the calendar.
+```powershell
+.\scripts\connect_accounts.ps1 -Provider status
+```
 
-Temporary access tokens expire. A later connector-auth stage will add a local
-OAuth broker with refresh-token storage in the Windows Credential Manager so
-normal use does not require manually replacing tokens.
+Restart DeskBob after connecting an account. GitHub reuses the GitHub CLI
+login and routes through GitHub's server-enforced read-only MCP endpoint. One
+Google authorization enables Gmail, Google Calendar, and Drive. Personal
+Microsoft mail and calendars are read locally from Outlook Classic, with no
+Azure tenant or OAuth application. Notion uses its official hosted MCP server.
+Dropbox uses the OpenAI-maintained connector. Slack uses Slack's official
+hosted MCP server.
 
-## Planned connector stages
+## Personal Outlook and multiple accounts
 
-1. **Read-only connector transport:** all eight supported connectors, strict
-   read-only tool allowlists, environment-token activation, and fake tests.
-2. **Google OAuth:** one browser authorization flow for Gmail, Calendar, and
-   Drive with refresh tokens protected by Windows.
-3. **Microsoft OAuth:** one browser authorization flow for Outlook Mail,
-   Outlook Calendar, Teams, and SharePoint.
-4. **Approval-gated writes:** separate tools for sending mail and changing
-   calendars. Every write will show the exact proposed action and require an
-   explicit confirmation; no write tool is exposed yet.
-5. **Daily context brief:** weather, calendar, important messages, Toronto
-   alerts, and relevant memories combined into a concise optional briefing.
+Open **Outlook (classic)** and add every Outlook/Hotmail/Microsoft account you
+want DeskBob to read. Let Outlook finish its initial sync, then run:
+
+```powershell
+.\scripts\connect_accounts.ps1 -Provider outlook
+```
+
+DeskBob detects every configured Outlook store and exposes read-only
+`search_outlook_mail` and `read_outlook_calendar` tools. It cannot send mail,
+modify an event, or delete anything. The integration is local to this Windows
+computer and requires no Azure subscription, trial, API key, copied token, or
+app registration.
+
+## Multiple Google accounts
+
+Run the wizard once per Google account. If `-Account` is omitted, the script
+asks for a short label:
+
+```powershell
+.\scripts\connect_accounts.ps1 -Provider google -Account personal
+.\scripts\connect_accounts.ps1 -Provider google -Account uoft
+```
+
+The OAuth application registration is reused, but each login gets an
+independent encrypted access/refresh-token session. Status shows every account:
+
+```powershell
+.\scripts\connect_accounts.ps1 -Provider status
+```
+
+DeskBob exposes account-qualified tools such as `gmail_personal` and
+`gmail_uoft`. Local Outlook results include their Outlook store/account name so
+DeskBob can distinguish accounts.
+
+Disconnect a wrong or revoked login before reconnecting it:
+
+```powershell
+.\scripts\connect_accounts.ps1 -Provider google -Account personal -Disconnect
+```
+
+Only explicitly listed read operations are exposed. DeskBob cannot send mail,
+change calendar events, post Slack messages, edit documents, move files, or
+delete anything in this stage.
+
+## Free-access boundaries and provider restrictions
+
+OAuth providers require DeskBob to identify itself as an application before
+they let a user sign in:
+
+- **Outlook Classic:** local access through your existing Outlook desktop
+  profile is included in the default flow and has no connector fee or trial.
+- **Microsoft Graph (optional):** this is no longer part of the default setup.
+  Use it only when a work/school organization supplies or permits an Entra
+  application. It is still available explicitly for SharePoint, OneDrive, or
+  Teams:
+
+  ```powershell
+  .\scripts\connect_accounts.ps1 -Provider microsoft -Account uoft -MicrosoftAccountType work -ClientId APPLICATION_ID
+  ```
+
+- **Notion:** its API is available to all users and supports dynamic client
+  registration, so its flow is fully automatic apart from sign-in and consent.
+- **GitHub:** reuses `gh auth`; no app registration or copied token is needed.
+  Normal account/API limits still apply.
+- **Google:** Google does not provide a supported CLI/API for creating a normal
+  desktop OAuth client. Create a Desktop app client once, download its JSON,
+  then run `.\scripts\connect_accounts.ps1 -GoogleClientJson .\client.json`.
+  The JSON is imported into Windows Credential Manager and does not belong in
+  the repository. Google OAuth apps left in external `Testing` status can issue
+  refresh tokens that expire after seven days; publish the consent screen for
+  durable personal use. Standard Workspace API quotas do not require enabling
+  billing; DeskBob never requests quota overages.
+- **Slack:** Slack requires a registered internal or Marketplace app and does
+  not support dynamic client registration. Its registered redirect URL must be
+  `http://localhost:53682`. Slack's Free plan is permanent but limits message
+  history and installed apps. DeskBob does not use Slack's paid hosted
+  workflow-app feature. After its client ID/secret are saved, the normal browser
+  consent flow can run:
+
+  ```powershell
+  .\scripts\connect_accounts.ps1 -Provider slack -ClientId YOUR_ID
+  ```
+
+- **Dropbox:** Dropbox states that its API can be used for free with a free or
+  paid Dropbox account. It requires an app registration/app key with redirect
+  URI `http://localhost:53683`. After its client ID is saved once,
+  authentication is browser-only:
+
+  ```powershell
+  .\scripts\connect_accounts.ps1 -Provider dropbox -ClientId YOUR_APP_KEY
+  ```
+
+These are provider-enforced app-registration requirements, not API-key
+collection. Access and refresh tokens remain local and encrypted by Windows.
+Existing ChatGPT/Codex connector sessions cannot be exported into a standalone
+Python application.
+
+Legacy `DESKBOB_*_OAUTH_TOKEN` variables in `.env` still work for development,
+but they expire and are not the recommended setup.

@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Literal, Protocol, cast
 
 from openai import AsyncOpenAI
 
 from desk_pet.agent.prompts import DESK_PET_INSTRUCTIONS
 from desk_pet.agent.tool_protocol import (
-    MCPConnectorTool,
+    MCPTool,
     ModelTool,
     ModelTurn,
     ToolCall,
@@ -74,8 +75,10 @@ class OpenAIModelClient:
         maximum_output_tokens: int,
         web_search_enabled: bool = False,
         web_search_context_size: Literal["low", "medium", "high"] = "low",
-        connector_tools: Sequence[MCPConnectorTool] = (),
+        connector_tools: Sequence[MCPTool] = (),
+        connector_loader: Callable[[], Awaitable[Sequence[MCPTool]]] | None = None,
         instructions: str = DESK_PET_INSTRUCTIONS,
+        clock: Callable[[], datetime] | None = None,
         responses: _ResponsesAPI | None = None,
     ) -> None:
         if responses is None:
@@ -88,7 +91,9 @@ class OpenAIModelClient:
         self._web_search_enabled = web_search_enabled
         self._web_search_context_size = web_search_context_size
         self._connector_tools = list(connector_tools)
+        self._connector_loader = connector_loader
         self._instructions = instructions
+        self._clock = clock or (lambda: datetime.now().astimezone())
 
     async def create_response(
         self,
@@ -104,10 +109,12 @@ class OpenAIModelClient:
                 )
             )
         model_tools.extend(self._connector_tools)
+        if self._connector_loader is not None:
+            model_tools.extend(await self._connector_loader())
 
         response = await self._responses.create(
             model=self._model,
-            instructions=self._instructions,
+            instructions=self._instructions + _local_time_instructions(self._clock()),
             input=list(input_items),
             tools=model_tools,
             parallel_tool_calls=False,
@@ -130,3 +137,15 @@ class OpenAIModelClient:
             output_text=response.output_text.strip(),
             tool_calls=tool_calls,
         )
+
+
+def _local_time_instructions(now: datetime) -> str:
+    local_now = now.astimezone() if now.tzinfo is None else now
+    timezone_name = local_now.tzname() or "local time"
+    return (
+        "\n\nAuthoritative current local date and time: "
+        f"{local_now.strftime('%A, %B %d, %Y at %I:%M:%S %p')} "
+        f"{timezone_name} (UTC{local_now.strftime('%z')[:3]}:{local_now.strftime('%z')[3:]}). "
+        "Resolve words such as today, tonight, tomorrow, and weekday names from this value. "
+        "Use get_current_time when the exact current time is material."
+    )
