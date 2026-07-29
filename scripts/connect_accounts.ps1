@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("all", "github", "google", "microsoft", "notion", "slack", "dropbox", "status")]
+    [ValidateSet("all", "github", "google", "outlook", "microsoft", "notion", "slack", "dropbox", "status")]
     [string]$Provider = "all",
     [string]$GoogleClientJson = "",
     [string]$ClientId = "",
@@ -82,15 +82,39 @@ function Initialize-MicrosoftOAuth {
     }
 }
 
+function Show-OutlookClassicStatus {
+    Write-Host "`nDeskBob Outlook Classic setup"
+    Write-Host "This uses the Outlook profile already on this PC. No Azure tenant, app registration, API key, billing, or trial is required."
+    Write-Host "Open Outlook (classic), add every Outlook/Microsoft account you want DeskBob to read, and let initial mail sync finish."
+    if ($DryRun) {
+        Write-Host "DRY RUN: $Python -m desk_pet.integrations.outlook_classic --status"
+        return
+    }
+    & $Python -m desk_pet.integrations.outlook_classic --status
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "Outlook Classic is not ready. Open Outlook (classic), sign in there, then rerun this wizard."
+        $script:OverallExitCode = 2
+    }
+}
+
 if ($Provider -eq "status") {
     if ($Disconnect) { throw "-Disconnect requires a specific account provider." }
     & $Python -m desk_pet.auth.wizard --status
-    exit $LASTEXITCODE
+    $OAuthStatus = $LASTEXITCODE
+    & $Python -m desk_pet.integrations.outlook_classic --status
+    $OutlookStatus = $LASTEXITCODE
+    if ($OAuthStatus -ne 0 -or $OutlookStatus -ne 0) { exit 2 }
+    exit 0
 }
 
 if ($Disconnect) {
     if ($Provider -eq "all") {
         throw "-Disconnect requires one provider at a time."
+    }
+    if ($Provider -eq "outlook") {
+        Write-Host "Outlook Classic has no DeskBob token to disconnect."
+        Write-Host "Remove or sign out of the account in Outlook (classic) itself."
+        exit 0
     }
     $DisconnectArguments = @("-m", "desk_pet.auth.wizard", "--disconnect", $Provider)
     if ($Account) { $DisconnectArguments += @("--account", $Account) }
@@ -104,13 +128,20 @@ if ($Disconnect) {
 
 [string[]]$Requested = @()
 if ($Provider -eq "all") {
-    $Requested = @("github", "microsoft", "notion", "google", "slack", "dropbox")
+    $Requested = @("github", "outlook", "notion", "google", "slack", "dropbox")
 } else {
     $Requested = @($Provider)
 }
 
 $OverallExitCode = 0
+Write-Host "`nDeskBob free connector wizard"
+Write-Host "The default paths use permanent free access or standard free quotas; this script never enables provider billing or starts a trial."
+Write-Host "DeskBob's OpenAI API model/tool requests are still billed separately by OpenAI."
 foreach ($RequestedProvider in $Requested) {
+    if ($RequestedProvider -eq "outlook") {
+        Show-OutlookClassicStatus
+        continue
+    }
     $ProviderAccount = if ($RequestedProvider -in @("google", "microsoft")) {
         $Account
     } else {
@@ -128,9 +159,14 @@ foreach ($RequestedProvider in $Requested) {
     }
 
     if ($RequestedProvider -eq "microsoft") {
+        if ($MicrosoftAccountType -eq "personal") {
+            Write-Host "`nPersonal Outlook setup now uses Outlook Classic locally so it does not need Azure."
+            Show-OutlookClassicStatus
+            continue
+        }
         if (-not $MicrosoftAccountType) {
             Write-Host "`nChoose the Microsoft permission profile:"
-            Write-Host "  personal   - Outlook Mail and Calendar"
+            Write-Host "  personal   - local Outlook Classic (free; no Azure)"
             Write-Host "  work       - Outlook plus SharePoint/OneDrive"
             Write-Host "  work-teams - Outlook, SharePoint/OneDrive, and Teams (admin may be required)"
             $MicrosoftAccountType = Read-Host "Profile"
@@ -139,6 +175,11 @@ foreach ($RequestedProvider in $Requested) {
                 $OverallExitCode = 2
                 continue
             }
+        }
+        if ($MicrosoftAccountType -eq "personal") {
+            Write-Host "`nPersonal Outlook setup uses Outlook Classic locally so it does not need Azure."
+            Show-OutlookClassicStatus
+            continue
         }
         try {
             if (-not $DryRun) { Initialize-MicrosoftOAuth }
@@ -166,5 +207,8 @@ foreach ($RequestedProvider in $Requested) {
     if ($LASTEXITCODE -ne 0) { $OverallExitCode = 2 }
 }
 
-if (-not $DryRun) { & $Python -m desk_pet.auth.wizard --status }
+if (-not $DryRun) {
+    & $Python -m desk_pet.auth.wizard --status
+    & $Python -m desk_pet.integrations.outlook_classic --status
+}
 exit $OverallExitCode

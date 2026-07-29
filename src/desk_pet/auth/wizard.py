@@ -149,7 +149,10 @@ def _show_status(store: CredentialStore, environment: Mapping[str, str]) -> None
             else:
                 registration = _load_registration(provider, store, environment) is not None
             detail = "ready to sign in" if registration else "needs one-time OAuth app setup"
-            print(f"{provider:24} {detail}")
+            display = "microsoft-graph (optional)" if provider == "microsoft" else provider
+            if provider == "microsoft" and not sessions and not registration:
+                detail = "not configured (work/school advanced option)"
+            print(f"{display:32} {detail}")
         except CredentialStoreError as exc:
             print(f"{provider:24} saved credential is invalid: {exc}")
 
@@ -182,6 +185,21 @@ def _connect_provider(
             spec = next(item for item in PROVIDER_REGISTRATIONS if item.provider == provider)
             print(f"\n{provider.title()} needs a one-time OAuth app registration.")
             print(f"Setup page: {spec.setup_url}")
+            if provider == "google":
+                print(
+                    "Create a Desktop OAuth client, download its JSON, then rerun "
+                    "with -GoogleClientJson <downloaded-json>."
+                )
+            elif provider == "slack":
+                print(
+                    "Create a Slack app on the Free plan, add redirect URL "
+                    "http://localhost:53682, then rerun with -ClientId <client-id>."
+                )
+            elif provider == "dropbox":
+                print(
+                    "Create a Dropbox scoped app, add redirect URL "
+                    "http://localhost:53683, then rerun with -ClientId <app-key>."
+                )
             return False
         client = (
             microsoft_client(

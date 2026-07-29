@@ -19,6 +19,7 @@ desktop = [
     "keyring>=25,<26",
     "numpy>=2,<2.4",
     "opencv-python-headless>=4.10,<5",
+    "pywin32>=311,<313; sys_platform == 'win32'",
     "sounddevice>=0.5,<1",
 ]
 dev = [

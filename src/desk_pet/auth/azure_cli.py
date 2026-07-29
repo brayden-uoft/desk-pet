@@ -167,8 +167,7 @@ def run(
         print(f"Microsoft OAuth app setup blocked: {exc}", file=sys.stderr)
         return 2
     print(
-        "[OK] Microsoft OAuth app registered and saved securely "
-        f"({registration.client_id[:8]}...)."
+        f"[OK] Microsoft OAuth app registered and saved securely ({registration.client_id[:8]}...)."
     )
     return 0
 

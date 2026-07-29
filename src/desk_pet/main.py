@@ -40,6 +40,10 @@ from desk_pet.hardware.interfaces import (
     TranscriptionService,
     TriggerDevice,
 )
+from desk_pet.integrations.outlook_classic import (
+    WindowsOutlookClassicService,
+    outlook_classic_installed,
+)
 from desk_pet.memory.context import (
     ContextDocumentError,
     build_context_instructions,
@@ -305,6 +309,7 @@ def build_application(
         skills=create_default_skill_registry(
             camera=camera,
             image_detail=config.camera.image_detail,
+            outlook=WindowsOutlookClassicService() if outlook_classic_installed() else None,
         ),
         maximum_tool_iterations=config.agent.maximum_tool_iterations,
         on_tool_requested=on_tool_requested,
