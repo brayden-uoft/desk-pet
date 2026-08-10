@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict
 
 
 class ToolSchema(TypedDict):
@@ -27,7 +27,18 @@ class MCPConnectorTool(TypedDict):
     allowed_tools: list[str]
 
 
-ModelTool = ToolSchema | WebSearchTool | MCPConnectorTool
+class RemoteMCPTool(TypedDict):
+    type: Literal["mcp"]
+    server_label: str
+    server_description: str
+    server_url: str
+    authorization: str
+    require_approval: Literal["never"]
+    allowed_tools: NotRequired[list[str]]
+
+
+MCPTool = MCPConnectorTool | RemoteMCPTool
+ModelTool = ToolSchema | WebSearchTool | MCPTool
 
 
 class ToolOutputText(TypedDict):

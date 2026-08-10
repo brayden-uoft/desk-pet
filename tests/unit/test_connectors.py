@@ -1,4 +1,19 @@
-from desk_pet.agent.connectors import CONNECTOR_SPECS, connector_tools_from_environment
+import asyncio
+import logging
+from typing import cast
+
+import pytest
+
+from desk_pet.agent.connectors import (
+    CONNECTOR_SPECS,
+    OAuthConnectorLoader,
+    connector_tools_from_environment,
+)
+from desk_pet.agent.tool_protocol import RemoteMCPTool
+from desk_pet.auth.http import OAuthHTTPClient, OAuthHTTPError
+from desk_pet.auth.models import OAuthSession
+from desk_pet.auth.oauth import OAuthManager
+from desk_pet.auth.store import MemoryCredentialStore
 
 
 def test_no_connector_tokens_means_no_private_tools() -> None:
@@ -28,3 +43,237 @@ def test_connector_tool_lists_are_read_only() -> None:
             not any(word in tool_name for word in forbidden_words)
             for tool_name in spec.read_only_tools
         )
+
+
+def test_oauth_loader_expands_one_google_login_into_three_connectors() -> None:
+    store = MemoryCredentialStore()
+    store.save(_session("google", "google-token"))
+    loader = OAuthConnectorLoader(OAuthManager(store, _UnusedHTTP()), {})
+
+    tools = asyncio.run(loader())
+
+    assert [tool["server_label"] for tool in tools] == [
+        "gmail",
+        "google_calendar",
+        "google_drive",
+    ]
+    assert all(tool["authorization"] == "google-token" for tool in tools)
+
+
+def test_oauth_loader_skips_explicitly_disabled_connector() -> None:
+    store = MemoryCredentialStore()
+    store.save(_session("google", "google-token"))
+    store.save(_session("dropbox", "dropbox-token"))
+    loader = OAuthConnectorLoader(
+        OAuthManager(store, _UnusedHTTP()),
+        {"DESKBOB_DISABLED_CONNECTORS": "dropbox, google_drive"},
+    )
+
+    tools = asyncio.run(loader())
+
+    assert [tool["server_label"] for tool in tools] == ["gmail", "google_calendar"]
+
+
+def test_oauth_loader_labels_multiple_google_accounts_separately() -> None:
+    store = MemoryCredentialStore()
+    store.save(_session("google:personal", "personal-token"))
+    store.save(_session("google:uoft", "uoft-token"))
+    loader = OAuthConnectorLoader(OAuthManager(store, _UnusedHTTP()), {})
+
+    tools = asyncio.run(loader())
+
+    assert [tool["server_label"] for tool in tools] == [
+        "gmail_personal",
+        "google_calendar_personal",
+        "google_drive_personal",
+        "gmail_uoft",
+        "google_calendar_uoft",
+        "google_drive_uoft",
+    ]
+    assert {tool["authorization"] for tool in tools} == {
+        "personal-token",
+        "uoft-token",
+    }
+    assert all("Account label:" in tool["server_description"] for tool in tools)
+
+
+def test_personal_microsoft_session_exposes_only_outlook() -> None:
+    store = MemoryCredentialStore()
+    store.save(
+        _session(
+            "microsoft:personal",
+            "personal-token",
+            scopes=("Mail.Read", "Calendars.Read"),
+        )
+    )
+    loader = OAuthConnectorLoader(OAuthManager(store, _UnusedHTTP()), {})
+
+    tools = asyncio.run(loader())
+
+    assert [tool["server_label"] for tool in tools] == [
+        "outlook_calendar_personal",
+        "outlook_email_personal",
+    ]
+
+
+def test_work_teams_session_exposes_only_scoped_microsoft_connectors() -> None:
+    store = MemoryCredentialStore()
+    store.save(
+        _session(
+            "microsoft:uoft",
+            "work-token",
+            scopes=(
+                "Mail.Read",
+                "Calendars.Read",
+                "Files.Read.All",
+                "Sites.Read.All",
+                "Chat.Read",
+                "ChannelMessage.Read.All",
+            ),
+        )
+    )
+    loader = OAuthConnectorLoader(OAuthManager(store, _UnusedHTTP()), {})
+
+    tools = asyncio.run(loader())
+
+    assert [tool["server_label"] for tool in tools] == [
+        "outlook_calendar_uoft",
+        "outlook_email_uoft",
+        "sharepoint_uoft",
+        "microsoft_teams_uoft",
+    ]
+
+
+def test_oauth_loader_adds_read_only_notion_remote_mcp() -> None:
+    store = MemoryCredentialStore()
+    store.save(_session("notion", "notion-token"))
+    loader = OAuthConnectorLoader(OAuthManager(store, _UnusedHTTP()), {})
+
+    tools = asyncio.run(loader())
+
+    assert tools == [
+        {
+            "type": "mcp",
+            "server_label": "notion",
+            "server_description": "Search and read Brayden's Notion workspace.",
+            "server_url": "https://mcp.notion.com/mcp",
+            "authorization": "notion-token",
+            "require_approval": "never",
+            "allowed_tools": [
+                "search",
+                "fetch",
+                "notion-get-self",
+                "notion-get-comments",
+                "notion-get-teams",
+                "notion-get-users",
+            ],
+        }
+    ]
+
+
+def test_github_uses_server_enforced_read_only_endpoint() -> None:
+    store = MemoryCredentialStore()
+    store.save(_session("github", "github-token"))
+    loader = OAuthConnectorLoader(OAuthManager(store, _UnusedHTTP()), {})
+
+    tools = asyncio.run(loader())
+    github = cast(RemoteMCPTool, tools[0])
+
+    assert github["server_url"] == "https://api.githubcopilot.com/mcp/x/all/readonly"
+    assert "allowed_tools" not in github
+
+
+def test_failed_remote_oauth_refresh_is_skipped_without_blocking_healthy_connectors() -> None:
+    store = MemoryCredentialStore()
+    store.save(_session("google", "google-token"))
+    store.save(
+        OAuthSession(
+            provider="notion",
+            client_id="client-id",
+            authorization_endpoint="https://mcp.notion.com/authorize",
+            token_endpoint="https://mcp.notion.com/token",
+            scopes=(),
+            access_token="expired-notion-token",
+            refresh_token="invalid-refresh-token",
+            expires_at=0,
+        )
+    )
+    http = _FailingRefreshHTTP()
+    loader = OAuthConnectorLoader(OAuthManager(store, http, clock=lambda: 1_000), {})
+
+    first_tools = loader.load()
+    second_tools = loader.load()
+
+    expected_labels = ["gmail", "google_calendar", "google_drive"]
+    assert [tool["server_label"] for tool in first_tools] == expected_labels
+    assert [tool["server_label"] for tool in second_tools] == expected_labels
+    assert http.refresh_attempts == 1
+
+
+def test_failed_remote_oauth_refresh_logs_account_without_tokens(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    store = MemoryCredentialStore()
+    store.save(
+        OAuthSession(
+            provider="notion",
+            client_id="client-id",
+            authorization_endpoint="https://mcp.notion.com/authorize",
+            token_endpoint="https://mcp.notion.com/token",
+            scopes=(),
+            access_token="expired-secret-access",
+            refresh_token="invalid-secret-refresh",
+            expires_at=0,
+        )
+    )
+    loader = OAuthConnectorLoader(
+        OAuthManager(store, _FailingRefreshHTTP(), clock=lambda: 1_000),
+        {},
+    )
+
+    with caplog.at_level(logging.WARNING):
+        assert loader.load() == []
+
+    message = "\n".join(caplog.messages)
+    assert "Skipping connector account notion" in message
+    assert "expired-secret-access" not in message
+    assert "invalid-secret-refresh" not in message
+
+
+def _session(
+    provider: str,
+    access_token: str,
+    *,
+    scopes: tuple[str, ...] = (),
+) -> OAuthSession:
+    return OAuthSession(
+        provider=provider,
+        client_id="client-id",
+        authorization_endpoint="https://example.test/authorize",
+        token_endpoint="https://example.test/token",
+        scopes=scopes,
+        access_token=access_token,
+        refresh_token=None,
+        expires_at=None,
+    )
+
+
+class _UnusedHTTP(OAuthHTTPClient):
+    def get_json(self, url: str) -> dict[str, object]:
+        raise AssertionError(url)
+
+    def post_form(self, url: str, values: object) -> dict[str, object]:
+        raise AssertionError((url, values))
+
+    def post_json(self, url: str, value: object) -> dict[str, object]:
+        raise AssertionError((url, value))
+
+
+class _FailingRefreshHTTP(_UnusedHTTP):
+    def __init__(self) -> None:
+        self.refresh_attempts = 0
+
+    def post_form(self, url: str, values: object) -> dict[str, object]:
+        del values
+        self.refresh_attempts += 1
+        raise OAuthHTTPError(f"OAuth service returned HTTP 400 for {url}.")

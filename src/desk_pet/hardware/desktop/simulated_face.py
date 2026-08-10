@@ -12,6 +12,7 @@ _FACES = {
     "speaking": "^     ^",
     "awaiting_confirmation": "?     ?",
     "muted": "—     —",
+    "sleeping": "—  z  —",
     "error": "×     ×",
 }
 
@@ -21,7 +22,7 @@ class TerminalFace:
         self._output = output
 
     async def set_state(self, state: str) -> None:
-        face = _FACES.get(state, _FACES["error"])
+        face = "[||||||||||]" if state.startswith("volume:") else _FACES.get(state, _FACES["error"])
         self._output(f"[{state.upper():>21}]  {face}")
 
     async def close(self) -> None:

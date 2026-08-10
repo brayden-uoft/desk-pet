@@ -22,7 +22,7 @@ RED_OFF = "#170303"
 GRID_COLOR = "#360808"
 
 
-def _run_preview_window(states: Any, pixel_size: int) -> None:
+def _run_preview_window(states: Any, focused: Any, pixel_size: int) -> None:
     try:
         import tkinter as tk
 
@@ -30,6 +30,15 @@ def _run_preview_window(states: Any, pixel_size: int) -> None:
         root.title("DeskBob Face - 32x16 monochrome red preview")
         root.configure(bg="#090000")
         root.resizable(False, False)
+
+        def set_focused(_event: Any) -> None:
+            focused.value = True
+
+        def set_unfocused(_event: Any) -> None:
+            focused.value = False
+
+        root.bind("<FocusIn>", set_focused)
+        root.bind("<FocusOut>", set_unfocused)
         canvas = tk.Canvas(
             root,
             width=FACE_WIDTH * pixel_size,
@@ -106,7 +115,11 @@ def _run_preview_window(states: Any, pixel_size: int) -> None:
             # Poll state changes frequently even when an idle pose has a long hold.
             root.after(40, draw_next_frame)
 
-        root.protocol("WM_DELETE_WINDOW", root.destroy)
+        def close_window() -> None:
+            focused.value = False
+            root.destroy()
+
+        root.protocol("WM_DELETE_WINDOW", close_window)
         draw_next_frame()
         root.mainloop()
     except Exception:
@@ -120,13 +133,17 @@ class DesktopPreviewFace:
         self._terminal = TerminalFace()
         context = multiprocessing.get_context("spawn")
         self._states = context.Queue()
+        self._focused = context.Value("b", False)
         self._process = context.Process(
             target=_run_preview_window,
-            args=(self._states, pixel_size),
+            args=(self._states, self._focused, pixel_size),
             name="deskbob-face-preview",
             daemon=True,
         )
         self._process.start()
+
+    def is_focused(self) -> bool:
+        return self._process.is_alive() and bool(self._focused.value)
 
     async def set_state(self, state: str) -> None:
         await self._terminal.set_state(state)
@@ -134,6 +151,7 @@ class DesktopPreviewFace:
             self._states.put(state)
 
     async def close(self) -> None:
+        self._focused.value = False
         if not self._process.is_alive():
             return
         self._states.put(None)

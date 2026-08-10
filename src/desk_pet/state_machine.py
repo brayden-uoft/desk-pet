@@ -15,6 +15,7 @@ class PetState(StrEnum):
     SPEAKING = "speaking"
     AWAITING_CONFIRMATION = "awaiting_confirmation"
     MUTED = "muted"
+    SLEEPING = "sleeping"
     ERROR = "error"
 
 

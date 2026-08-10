@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from desk_pet.agent.client import Message, OpenAIModelClient
@@ -53,6 +54,19 @@ class FakeResponsesAPI:
             "max_output_tokens": max_output_tokens,
             "store": store,
         }
+        return FakeResponse()
+
+
+class MissingDropboxResponsesAPI(FakeResponsesAPI):
+    def __init__(self) -> None:
+        super().__init__()
+        self.calls = 0
+
+    async def create(self, **arguments: Any) -> FakeResponse:
+        self.calls += 1
+        self.arguments = arguments
+        if self.calls == 1:
+            raise RuntimeError("Connector with ID 'connector_dropbox' not found.")
         return FakeResponse()
 
 
@@ -120,6 +134,31 @@ def test_openai_client_adds_hosted_web_search_when_enabled() -> None:
     assert responses.arguments["tools"] == [{"type": "web_search", "search_context_size": "medium"}]
 
 
+def test_openai_client_skips_external_tool_loading_for_clear_local_conversation() -> None:
+    responses = FakeResponsesAPI()
+    connector_loads = 0
+
+    async def load_connectors() -> list[MCPConnectorTool]:
+        nonlocal connector_loads
+        connector_loads += 1
+        return []
+
+    client = OpenAIModelClient(
+        model="test-model",
+        reasoning_effort="none",
+        request_timeout_seconds=10,
+        maximum_output_tokens=250,
+        web_search_enabled=True,
+        connector_loader=load_connectors,
+        responses=responses,
+    )
+
+    asyncio.run(client.create_response([{"role": "user", "content": "Say hello."}], []))
+
+    assert connector_loads == 0
+    assert responses.arguments["tools"] == []
+
+
 def test_openai_client_adds_configured_connector_tools() -> None:
     responses = FakeResponsesAPI()
     connector = MCPConnectorTool(
@@ -145,6 +184,70 @@ def test_openai_client_adds_configured_connector_tools() -> None:
     assert responses.arguments["tools"] == [connector]
 
 
+def test_openai_client_quarantines_an_unavailable_connector_and_retries() -> None:
+    responses = MissingDropboxResponsesAPI()
+    dropbox = MCPConnectorTool(
+        type="mcp",
+        server_label="dropbox",
+        server_description="Read Dropbox.",
+        connector_id="connector_dropbox",
+        authorization="secret-token",
+        require_approval="never",
+        allowed_tools=["search"],
+    )
+    client = OpenAIModelClient(
+        model="test-model",
+        reasoning_effort="low",
+        request_timeout_seconds=10,
+        maximum_output_tokens=250,
+        connector_tools=[dropbox],
+        responses=responses,
+    )
+
+    asyncio.run(client.create_response([{"role": "user", "content": "Read Dropbox"}], []))
+    asyncio.run(client.create_response([{"role": "user", "content": "Read Dropbox again"}], []))
+
+    assert responses.calls == 3
+    assert responses.arguments["tools"] == []
+
+
+def test_openai_client_reloads_connector_tools_for_every_request() -> None:
+    responses = FakeResponsesAPI()
+    calls = 0
+
+    async def load_connectors() -> list[MCPConnectorTool]:
+        nonlocal calls
+        calls += 1
+        return [
+            MCPConnectorTool(
+                type="mcp",
+                server_label="gmail",
+                server_description="Read mail.",
+                connector_id="connector_gmail",
+                authorization=f"token-{calls}",
+                require_approval="never",
+                allowed_tools=["search_emails"],
+            )
+        ]
+
+    client = OpenAIModelClient(
+        model="test-model",
+        reasoning_effort="low",
+        request_timeout_seconds=10,
+        maximum_output_tokens=250,
+        connector_loader=load_connectors,
+        responses=responses,
+    )
+
+    asyncio.run(client.create_response([{"role": "user", "content": "Mail?"}], []))
+    first_token = responses.arguments["tools"][0]["authorization"]
+    asyncio.run(client.create_response([{"role": "user", "content": "Mail again?"}], []))
+
+    assert calls == 2
+    assert first_token == "token-1"
+    assert responses.arguments["tools"][0]["authorization"] == "token-2"
+
+
 def test_openai_client_uses_supplied_runtime_instructions() -> None:
     responses = FakeResponsesAPI()
     client = OpenAIModelClient(
@@ -153,9 +256,53 @@ def test_openai_client_uses_supplied_runtime_instructions() -> None:
         request_timeout_seconds=10,
         maximum_output_tokens=250,
         instructions="DeskBob runtime context",
+        clock=lambda: datetime(
+            2026,
+            7,
+            27,
+            23,
+            5,
+            tzinfo=timezone(timedelta(hours=-4), "EDT"),
+        ),
         responses=responses,
     )
 
     asyncio.run(client.create_response([{"role": "user", "content": "Hello"}], []))
 
-    assert responses.arguments["instructions"] == "DeskBob runtime context"
+    instructions = responses.arguments["instructions"]
+    assert instructions.startswith("DeskBob runtime context")
+    assert "Monday, July 27, 2026 at 11:05:00 PM EDT (UTC-04:00)" in instructions
+    assert "tomorrow" in instructions
+
+
+def test_openai_client_refreshes_local_time_context_each_model_turn() -> None:
+    responses = FakeResponsesAPI()
+    current = datetime(
+        2026,
+        7,
+        27,
+        23,
+        59,
+        tzinfo=timezone(timedelta(hours=-4), "EDT"),
+    )
+
+    def clock() -> datetime:
+        nonlocal current
+        value = current
+        current += timedelta(minutes=2)
+        return value
+
+    client = OpenAIModelClient(
+        model="test-model",
+        reasoning_effort="low",
+        request_timeout_seconds=10,
+        maximum_output_tokens=250,
+        clock=clock,
+        responses=responses,
+    )
+
+    asyncio.run(client.create_response([{"role": "user", "content": "Tomorrow?"}], []))
+    assert "Monday, July 27, 2026 at 11:59:00 PM" in responses.arguments["instructions"]
+
+    asyncio.run(client.create_response([{"role": "user", "content": "Tomorrow?"}], []))
+    assert "Tuesday, July 28, 2026 at 12:01:00 AM" in responses.arguments["instructions"]

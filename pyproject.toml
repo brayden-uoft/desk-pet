@@ -9,15 +9,17 @@ description = "Portable AI desk pet with simulated and physical hardware adapter
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "openai>=2.0,<3",
+    "openai[realtime]>=2.0,<3",
     "python-dotenv>=1.0,<2",
     "PyYAML>=6.0.2,<7",
 ]
 
 [project.optional-dependencies]
 desktop = [
+    "keyring>=25,<26",
     "numpy>=2,<2.4",
     "opencv-python-headless>=4.10,<5",
+    "pywin32>=311,<313; sys_platform == 'win32'",
     "sounddevice>=0.5,<1",
 ]
 dev = [

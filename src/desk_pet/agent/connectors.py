@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from desk_pet.agent.tool_protocol import MCPConnectorTool
+from desk_pet.agent.tool_protocol import MCPConnectorTool, MCPTool, RemoteMCPTool
+from desk_pet.auth.http import OAuthHTTPError
+from desk_pet.auth.oauth import OAuthFlowError, OAuthManager
+from desk_pet.auth.store import CredentialStoreError
+
+LOGGER = logging.getLogger(__name__)
+OAUTH_ACCESS_ERRORS = (CredentialStoreError, OAuthFlowError, OAuthHTTPError)
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,26 +116,202 @@ CONNECTOR_SPECS: tuple[ConnectorSpec, ...] = (
     ),
 )
 
+PROVIDER_CONNECTORS: dict[str, tuple[str, ...]] = {
+    "google": ("gmail", "google_calendar", "google_drive"),
+    "microsoft": (
+        "outlook_calendar",
+        "outlook_email",
+        "microsoft_teams",
+        "sharepoint",
+    ),
+    "dropbox": ("dropbox",),
+}
+
+REMOTE_MCP_SPECS: dict[str, RemoteMCPTool] = {
+    "github": RemoteMCPTool(
+        type="mcp",
+        server_label="github",
+        server_description="Read repositories, issues, pull requests, and actions from GitHub.",
+        server_url="https://api.githubcopilot.com/mcp/x/all/readonly",
+        authorization="",
+        require_approval="never",
+    ),
+    "notion": RemoteMCPTool(
+        type="mcp",
+        server_label="notion",
+        server_description="Search and read Brayden's Notion workspace.",
+        server_url="https://mcp.notion.com/mcp",
+        authorization="",
+        require_approval="never",
+        allowed_tools=[
+            "search",
+            "fetch",
+            "notion-get-self",
+            "notion-get-comments",
+            "notion-get-teams",
+            "notion-get-users",
+        ],
+    ),
+    "slack": RemoteMCPTool(
+        type="mcp",
+        server_label="slack",
+        server_description="Search and read Brayden's Slack workspace.",
+        server_url="https://mcp.slack.com/mcp",
+        authorization="",
+        require_approval="never",
+        allowed_tools=[
+            "search_messages",
+            "search_files",
+            "read_files",
+            "search_emoji",
+            "search_users",
+            "search_channels",
+            "read_channel",
+            "read_thread",
+            "read_canvas",
+            "read_user_profile",
+            "list_channel_members",
+        ],
+    ),
+}
+
 
 def connector_tools_from_environment(
     environment: Mapping[str, str] | None = None,
 ) -> list[MCPConnectorTool]:
     """Enable only connectors whose OAuth token is explicitly present."""
     values = os.environ if environment is None else environment
+    disabled = _disabled_connectors(values)
     tools: list[MCPConnectorTool] = []
     for spec in CONNECTOR_SPECS:
+        if spec.label in disabled:
+            continue
         authorization = values.get(spec.token_environment_variable, "").strip()
         if not authorization:
             continue
-        tools.append(
-            MCPConnectorTool(
-                type="mcp",
-                server_label=spec.label,
-                server_description=spec.description,
-                connector_id=spec.connector_id,
-                authorization=authorization,
-                require_approval="never",
-                allowed_tools=list(spec.read_only_tools),
-            )
-        )
+        tools.append(_connector_tool(spec, authorization))
     return tools
+
+
+class OAuthConnectorLoader:
+    """Build current read-only connector tools and refresh expiring tokens."""
+
+    def __init__(
+        self,
+        manager: OAuthManager,
+        environment: Mapping[str, str] | None = None,
+    ) -> None:
+        self._manager = manager
+        self._environment = os.environ if environment is None else environment
+        self._failed_sessions: set[str] = set()
+
+    async def __call__(self) -> list[MCPTool]:
+        return await asyncio.to_thread(self.load)
+
+    def load(self) -> list[MCPTool]:
+        by_label = {spec.label: spec for spec in CONNECTOR_SPECS}
+        disabled = _disabled_connectors(self._environment)
+        tools: list[MCPTool] = list(connector_tools_from_environment(self._environment))
+        enabled_labels = {tool["server_label"] for tool in tools}
+        for provider, labels in PROVIDER_CONNECTORS.items():
+            try:
+                sessions = self._manager.sessions(provider)
+            except CredentialStoreError:
+                sessions = []
+            for session in sessions:
+                if session.provider in self._failed_sessions:
+                    continue
+                try:
+                    authorization = self._manager.access_token(session.provider)
+                except OAUTH_ACCESS_ERRORS as exc:
+                    self._quarantine_failed_session(session.provider, exc)
+                    authorization = None
+                if not authorization:
+                    continue
+                account = _account_from_session_key(provider, session.provider)
+                for label in _connector_labels_for_session(provider, labels, session.scopes):
+                    if label in disabled:
+                        continue
+                    server_label = label if account is None else f"{label}_{account}"
+                    if server_label in enabled_labels:
+                        continue
+                    spec = by_label[label]
+                    tools.append(
+                        _connector_tool(
+                            spec,
+                            authorization,
+                            account=account,
+                        )
+                    )
+                    enabled_labels.add(server_label)
+        for provider, template in REMOTE_MCP_SPECS.items():
+            if provider in disabled or provider in self._failed_sessions:
+                continue
+            try:
+                authorization = self._manager.access_token(provider)
+            except OAUTH_ACCESS_ERRORS as exc:
+                self._quarantine_failed_session(provider, exc)
+                authorization = None
+            if not authorization or provider in enabled_labels:
+                continue
+            tool = RemoteMCPTool(**template)
+            tool["authorization"] = authorization
+            tools.append(tool)
+        return tools
+
+    def _quarantine_failed_session(self, provider: str, error: Exception) -> None:
+        self._failed_sessions.add(provider)
+        LOGGER.warning(
+            "Skipping connector account %s for this run because OAuth refresh failed: %s",
+            provider,
+            error,
+        )
+
+
+def _disabled_connectors(environment: Mapping[str, str]) -> set[str]:
+    return {
+        label.strip().lower()
+        for label in environment.get("DESKBOB_DISABLED_CONNECTORS", "").split(",")
+        if label.strip()
+    }
+
+
+def _connector_tool(
+    spec: ConnectorSpec,
+    authorization: str,
+    *,
+    account: str | None = None,
+) -> MCPConnectorTool:
+    label = spec.label if account is None else f"{spec.label}_{account}"
+    description = (
+        spec.description if account is None else f"{spec.description} Account label: {account}."
+    )
+    return MCPConnectorTool(
+        type="mcp",
+        server_label=label,
+        server_description=description,
+        connector_id=spec.connector_id,
+        authorization=authorization,
+        require_approval="never",
+        allowed_tools=list(spec.read_only_tools),
+    )
+
+
+def _account_from_session_key(provider: str, session_key: str) -> str | None:
+    prefix = f"{provider}:"
+    return session_key[len(prefix) :] if session_key.startswith(prefix) else None
+
+
+def _connector_labels_for_session(
+    provider: str,
+    labels: tuple[str, ...],
+    scopes: tuple[str, ...],
+) -> tuple[str, ...]:
+    if provider != "microsoft":
+        return labels
+    enabled = ["outlook_calendar", "outlook_email"]
+    if "Sites.Read.All" in scopes and "Files.Read.All" in scopes:
+        enabled.append("sharepoint")
+    if "Chat.Read" in scopes and "ChannelMessage.Read.All" in scopes:
+        enabled.append("microsoft_teams")
+    return tuple(enabled)

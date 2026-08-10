@@ -47,8 +47,7 @@ def test_speaking_cycles_keep_eyes_stable_and_move_mouth_one_step_at_a_time() ->
     assert all(145 <= frame.duration_ms <= 245 for frame in cycle)
     assert all(frame.pixels[:10] == cycle[0].pixels[:10] for frame in cycle)
     assert all(
-        abs(current - previous) <= 1
-        for previous, current in zip(levels, levels[1:], strict=False)
+        abs(current - previous) <= 1 for previous, current in zip(levels, levels[1:], strict=False)
     )
     assert levels[0] == levels[-1] == 0
 

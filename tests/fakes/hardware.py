@@ -108,6 +108,26 @@ class FakePlayer:
             raise AudioCancelled("Playback cancelled.")
 
 
+class FakeOutputControl:
+    def __init__(self, volume: float = 0.7) -> None:
+        self._volume = volume
+        self._muted = False
+
+    @property
+    def volume(self) -> float:
+        return self._volume
+
+    @property
+    def muted(self) -> bool:
+        return self._muted
+
+    def set_volume(self, volume: float) -> None:
+        self._volume = min(1.0, max(0.0, volume))
+
+    def set_muted(self, muted: bool) -> None:
+        self._muted = muted
+
+
 class CancellablePlayer:
     def __init__(self) -> None:
         self.started = asyncio.Event()

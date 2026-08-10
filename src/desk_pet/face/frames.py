@@ -178,6 +178,36 @@ def _error() -> PixelFrame:
     return builder.frame()
 
 
+def _muted() -> PixelFrame:
+    builder = _FrameBuilder()
+    _open_eyes(builder)
+    builder.horizontal(11, 20, 12)
+    builder.pixels(((13, 10), (14, 11), (17, 13), (18, 14), (18, 10), (17, 11), (14, 13), (13, 14)))
+    return builder.frame()
+
+
+def _sleeping() -> PixelFrame:
+    builder = _FrameBuilder()
+    builder.horizontal(5, 10, 6)
+    builder.horizontal(21, 26, 6)
+    builder.horizontal(13, 18, 13)
+    builder.pixels(((24, 2), (25, 2), (26, 2), (25, 3), (24, 4), (25, 4), (26, 4)))
+    return builder.frame()
+
+
+def _volume(percent: int) -> PixelFrame:
+    builder = _FrameBuilder()
+    bars = max(0, min(10, round(percent / 10)))
+    builder.vertical(2, 3, 12)
+    builder.vertical(29, 3, 12)
+    builder.horizontal(2, 29, 3)
+    builder.horizontal(2, 29, 12)
+    for index in range(bars):
+        x1 = 4 + index * 2
+        builder.vertical(x1, 5, 10)
+    return builder.frame()
+
+
 FACE_FRAMES: dict[str, PixelFrame] = {
     "idle": _idle(),
     "blink": _idle(blink=True),
@@ -200,6 +230,8 @@ FACE_FRAMES: dict[str, PixelFrame] = {
     "talk_medium": _speaking(mouth="medium", eyes="center"),
     "talk_wide": _speaking(mouth="wide", eyes="center"),
     "error": _error(),
+    "muted": _muted(),
+    "sleeping": _sleeping(),
 }
 
 FACE_ANIMATIONS: dict[str, tuple[PixelFrame, ...]] = {
@@ -232,11 +264,15 @@ FACE_ANIMATIONS: dict[str, tuple[PixelFrame, ...]] = {
         FACE_FRAMES[f"talk_{mouth}"] for mouth in ("closed", "small", "medium", "wide")
     ),
     "error": (FACE_FRAMES["error"],),
+    "muted": (FACE_FRAMES["muted"],),
+    "sleeping": (FACE_FRAMES["sleeping"],),
     "starting": (FACE_FRAMES["think_center"],),
 }
 
 
 def frames_for_state(state: str) -> tuple[PixelFrame, ...]:
+    if state.startswith("volume:"):
+        return (_volume(int(state.partition(":")[2])),)
     return FACE_ANIMATIONS.get(state, FACE_ANIMATIONS["idle"])
 
 
@@ -246,6 +282,8 @@ def animation_cycle_for_state(
 ) -> tuple[TimedFrame, ...]:
     """Build one varied animation cycle with state-specific frame timing."""
     randomizer = rng or random.Random()
+    if state.startswith("volume:"):
+        return (TimedFrame(_volume(int(state.partition(":")[2])), 500),)
     if state == "idle" or state not in FACE_ANIMATIONS:
         return _idle_cycle(randomizer)
     if state == "speaking":

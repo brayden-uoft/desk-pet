@@ -56,10 +56,10 @@ requests and exposes no shell, filesystem, email, or calendar actions.
 
 ```text
 STARTING -> IDLE
-Right Alt down -> LISTENING -> Right Alt up -> TRANSCRIBING -> THINKING
+Focused button A down -> LISTENING -> button A up -> TRANSCRIBING -> THINKING
       -> optional USING_TOOL -> SPEAKING -> IDLE
-Escape during LISTENING or SPEAKING -> cancel operation -> IDLE
-Escape while IDLE -> clean shutdown
+Button C or Escape during LISTENING or SPEAKING -> cancel operation -> IDLE
+Preview focus loss during LISTENING -> finish recording -> TRANSCRIBING
 ```
 
 Windows recording and playback use `sounddevice` adapters. Recording,
@@ -68,16 +68,17 @@ tests replace all four without opening a physical device or contacting an API.
 The application transfers WAV bytes in memory instead of persisting temporary
 media.
 
-Windows voice mode globally polls the physical right Alt key state. A down edge starts the
-microphone and an up edge requests a graceful stop, preserving the captured
-audio for transcription. Escape uses the separate cancellation signal and
-discards active recording or playback. Idle Escape presses are ignored in the
-packaged Windows application so background use is not interrupted; Ctrl+C or
-closing the terminal shuts it down.
+Windows voice mode polls macropad button A but gates every edge on the dedicated
+face preview's focus state. A down edge starts the microphone and an up edge
+requests a graceful stop, preserving the captured audio for transcription.
+Button C and Escape use the separate cancellation signal and discard active
+recording or playback. Inputs pressed before the preview gains focus are
+ignored until released, preventing phantom commands. Ctrl+C or closing the
+terminal shuts DeskBob down.
 
 The keyboard adapter polls for keys asynchronously. This lets cancellation
 stop waiting cleanly without leaving a blocked background thread that could
-consume a later right Alt or Escape press.
+consume a later button or Escape press.
 
 ## Stage 5 vision flow
 
@@ -145,8 +146,8 @@ start before transcription, then varied loops continue concurrently through
 transcription, model/tool work, and final-answer synthesis:
 
 ```text
-Right Alt down -> press cue -> record
-Right Alt up -> release cue + machine loop -> transcribe -> model/tools
+Focused button A down -> press cue -> record
+Button A up -> release cue + machine loop -> transcribe -> model/tools
              -> synthesize answer -> stop loop -> SPEAKING -> play answer
 ```
 

@@ -31,4 +31,6 @@ python -m desk_pet --config configs/kickpi.yaml
 ```
 
 Do not use Docker initially. Native access is simpler for USB audio, camera,
-Bluetooth keyboard input, SPI, and GPIO.
+Bluetooth keyboard input, SPI, and GPIO. The fixed macropad reports `a` for
+push-to-talk and `c` for cancel; the dedicated Linux session owns these keys,
+so desktop foreground gating is unnecessary on the robot.

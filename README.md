@@ -28,14 +28,23 @@ notepad .env
 
 Replace `your-api-key-here` with an OpenAI API key. Never commit `.env`.
 
-The first launch creates `.venv` and installs the project. When the idle face
-appears, hold the **right Alt key** while speaking and release it to send.
-Transcription starts as soon as the key is released. Right Alt is polled as a
-global Windows key, so the terminal can be minimized and another application
-can have focus. The 15-second hard timeout remains as a safety limit. Press
-`Escape` to interrupt recording or playback. When DeskBob is idle, global
-Escape presses are ignored so another application cannot accidentally shut him
-down. Press `Ctrl+C` in PowerShell or close the terminal window to exit.
+The first launch creates `.venv` and installs the project. Click the DeskBob
+face preview before using the macropad. Input is accepted only while that
+window has focus, so its ordinary letter bindings cannot activate DeskBob in
+other applications.
+
+| Control | Action |
+| --- | --- |
+| Hold **A** | Push to talk; release to send. Pressing A while DeskBob speaks interrupts him and starts a new recording. |
+| Tap **B** | Generate a concise "What's up?" briefing using connected time, weather, calendar, messages, timers, and Toronto information. |
+| Hold **B** | Capture one camera frame and ask what DeskBob sees. |
+| Tap **C** | Cancel recording, model/tool work, synthesis, or playback. `Escape` is an equivalent cancel key. |
+| Hold **C** | Toggle privacy sleep; microphone and camera actions are ignored while asleep. |
+| Turn dial | **P** / CCW lowers and **R** / CW raises output by 10%, with a temporary LED volume bar. |
+| Press dial | **Q** toggles mute and leaves a clear muted face visible. |
+
+The 15-second recording timeout remains a safety limit. Press `Ctrl+C` in
+PowerShell or close the terminal window to exit.
 
 The Windows profile opens a live DeskBob face window driven by the same state
 events as the eventual hardware. It is exactly 32 pixels wide by 16 pixels
@@ -46,7 +55,7 @@ starting the AI or using an API key:
 .\scripts\preview_face.ps1
 ```
 
-DeskBob plays a short rising chirp when right Alt is pressed and a falling
+DeskBob plays a short rising chirp when button A is pressed and a falling
 acknowledgement when it is released. While transcription, model work, tools,
 and final speech synthesis continue concurrently, a locally generated robot
 brain soundscape fills the dead air with a low cog-like whirr, relay clicks,
@@ -90,11 +99,29 @@ Windows voice output uses the `echo` voice at `1.5x` speed by default. Override
 the voice with `OPENAI_SPEECH_VOICE` or edit `audio.speech_speed` in
 `configs/windows.yaml`.
 
+The default conversation model is `gpt-5.6-luna` with reasoning disabled, a
+shorter spoken-response budget, and eight recent history messages. This keeps
+DeskBob on the same OpenAI account and API key instead of adding another paid
+provider. Each voice turn logs transcription, model, speech-synthesis, and
+total release-to-audio timing so later streaming work can target the slowest
+stage with evidence.
+
 Typed input remains available:
 
 ```powershell
 .\scripts\run_windows.ps1 -Mode text
 ```
+
+Connect GitHub, Gmail, Google Calendar, Drive, Outlook, Teams, SharePoint,
+Notion, Slack, and Dropbox with the guided browser OAuth wizard:
+
+```powershell
+.\scripts\connect_accounts.ps1
+```
+
+Tokens are refreshable and stored in Windows Credential Manager. See
+[external connectors](docs/connectors.md) for the few provider-enforced
+one-time app-registration constraints and named multi-account setup.
 
 To inspect the Windows audio devices and the current defaults:
 

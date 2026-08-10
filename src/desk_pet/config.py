@@ -16,6 +16,7 @@ class TriggerConfig:
     driver: str
     listen_key: str
     cancel_key: str
+    device_name: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +30,10 @@ class AudioConfig:
     output_driver: str
     input_device: str | int | None
     output_device: str | int | None
+    input_channels: int
+    output_channels: int | None
+    output_volume: float
+    output_sample_rate_hz: int | None
     sample_rate_hz: int
     block_duration_ms: int
     silence_timeout_ms: int
@@ -114,6 +119,15 @@ def _required_string(mapping: dict[str, Any], key: str, section: str) -> str:
     value = mapping.get(key)
     if not isinstance(value, str) or not value.strip():
         raise ConfigError(f"{section}.{key} must be a non-empty string")
+    return value
+
+
+def _optional_string(mapping: dict[str, Any], key: str, section: str) -> str | None:
+    value = mapping.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ConfigError(f"{section}.{key} must be null or a non-empty string")
     return value
 
 
@@ -228,6 +242,7 @@ def load_config(path: str | Path) -> AppConfig:
             driver=_required_string(trigger, "driver", "trigger"),
             listen_key=_required_string(trigger, "listen_key", "trigger"),
             cancel_key=_required_string(trigger, "cancel_key", "trigger"),
+            device_name=_optional_string(trigger, "device_name", "trigger"),
         ),
         face=FaceConfig(driver=_required_string(face, "driver", "face")),
         audio=AudioConfig(
@@ -235,6 +250,28 @@ def load_config(path: str | Path) -> AppConfig:
             output_driver=_required_string(audio, "output_driver", "audio"),
             input_device=_device_selector(audio, "input_device", "audio"),
             output_device=_device_selector(audio, "output_device", "audio"),
+            input_channels=_positive_integer(audio, "input_channels", "audio")
+            if "input_channels" in audio
+            else 1,
+            output_channels=(
+                _positive_integer(audio, "output_channels", "audio")
+                if "output_channels" in audio
+                else None
+            ),
+            output_volume=_bounded_number(
+                audio,
+                "output_volume",
+                "audio",
+                minimum=0.0,
+                maximum=1.0,
+            )
+            if "output_volume" in audio
+            else 0.7,
+            output_sample_rate_hz=(
+                _positive_integer(audio, "output_sample_rate_hz", "audio")
+                if "output_sample_rate_hz" in audio
+                else None
+            ),
             sample_rate_hz=_positive_integer(audio, "sample_rate_hz", "audio"),
             block_duration_ms=_positive_integer(audio, "block_duration_ms", "audio"),
             silence_timeout_ms=_positive_integer(audio, "silence_timeout_ms", "audio"),
