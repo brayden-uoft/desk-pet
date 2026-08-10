@@ -10,10 +10,15 @@ def test_loads_windows_configuration() -> None:
 
     assert config.profile == "windows"
     assert config.trigger.driver == "keyboard"
-    assert config.trigger.listen_key == "right_alt"
+    assert config.trigger.listen_key == "a"
+    assert config.trigger.cancel_key == "c"
     assert config.face.driver == "desktop_preview"
     assert config.audio.speech_speed == 1.5
     assert config.audio.thinking_audio_enabled
+    assert config.agent.model == "gpt-5.6-luna"
+    assert config.agent.reasoning_effort == "none"
+    assert config.agent.maximum_output_tokens == 250
+    assert config.agent.history_limit == 8
 
 
 def test_environment_default_is_expanded(tmp_path: Path) -> None:

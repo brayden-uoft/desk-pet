@@ -6,7 +6,12 @@ import logging
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
-from desk_pet.agent.client import Message, ResponseModelClient
+from desk_pet.agent.client import (
+    Message,
+    ResponseModelClient,
+    StreamingResponseModelClient,
+    TextDeltaCallback,
+)
 from desk_pet.agent.tool_protocol import ToolOutput
 from desk_pet.skills.registry import SkillError, SkillRegistry
 
@@ -34,6 +39,25 @@ class AgentLoop:
         self._on_tool_requested = on_tool_requested
 
     async def complete(self, messages: Sequence[Message]) -> str:
+        async def ignore_delta(_delta: str) -> None:
+            return None
+
+        return await self._complete(messages, ignore_delta, streaming=False)
+
+    async def complete_stream(
+        self,
+        messages: Sequence[Message],
+        on_text_delta: TextDeltaCallback,
+    ) -> str:
+        return await self._complete(messages, on_text_delta, streaming=True)
+
+    async def _complete(
+        self,
+        messages: Sequence[Message],
+        on_text_delta: TextDeltaCallback,
+        *,
+        streaming: bool,
+    ) -> str:
         input_items: list[dict[str, Any]] = [
             {"role": message.role, "content": message.content} for message in messages
         ]
@@ -41,7 +65,14 @@ class AgentLoop:
         tool_call_count = 0
 
         for _ in range(self._maximum_tool_iterations + 1):
-            turn = await self._model.create_response(input_items, self._skills.schemas())
+            if streaming and isinstance(self._model, StreamingResponseModelClient):
+                turn = await self._model.create_response_stream(
+                    input_items,
+                    self._skills.schemas(),
+                    on_text_delta,
+                )
+            else:
+                turn = await self._model.create_response(input_items, self._skills.schemas())
             input_items.extend(turn.output_items)
 
             if not turn.tool_calls:

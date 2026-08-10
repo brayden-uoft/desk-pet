@@ -37,6 +37,7 @@ def capture_wav(
     maximum_recording_seconds: float,
     silence_threshold: float,
     stop_on_silence: bool = True,
+    on_block: BlockWriter | None = None,
 ) -> bytes:
     """Capture blocks until requested stop, optional silence, or the hard limit."""
     frames_per_block = max(1, sample_rate_hz * block_duration_ms // 1000)
@@ -56,6 +57,8 @@ def capture_wav(
             break
         block = read_block(frames_per_block)
         blocks.append(block)
+        if on_block is not None:
+            on_block(block)
         if pcm_rms(block) >= silence_threshold:
             heard_speech = True
             silent_blocks = 0

@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 
 from desk_pet.agent.tool_protocol import MCPConnectorTool, MCPTool, RemoteMCPTool
-from desk_pet.auth.oauth import OAuthManager
+from desk_pet.auth.http import OAuthHTTPError
+from desk_pet.auth.oauth import OAuthFlowError, OAuthManager
 from desk_pet.auth.store import CredentialStoreError
+
+LOGGER = logging.getLogger(__name__)
+OAUTH_ACCESS_ERRORS = (CredentialStoreError, OAuthFlowError, OAuthHTTPError)
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,8 +181,11 @@ def connector_tools_from_environment(
 ) -> list[MCPConnectorTool]:
     """Enable only connectors whose OAuth token is explicitly present."""
     values = os.environ if environment is None else environment
+    disabled = _disabled_connectors(values)
     tools: list[MCPConnectorTool] = []
     for spec in CONNECTOR_SPECS:
+        if spec.label in disabled:
+            continue
         authorization = values.get(spec.token_environment_variable, "").strip()
         if not authorization:
             continue
@@ -195,12 +203,14 @@ class OAuthConnectorLoader:
     ) -> None:
         self._manager = manager
         self._environment = os.environ if environment is None else environment
+        self._failed_sessions: set[str] = set()
 
     async def __call__(self) -> list[MCPTool]:
         return await asyncio.to_thread(self.load)
 
     def load(self) -> list[MCPTool]:
         by_label = {spec.label: spec for spec in CONNECTOR_SPECS}
+        disabled = _disabled_connectors(self._environment)
         tools: list[MCPTool] = list(connector_tools_from_environment(self._environment))
         enabled_labels = {tool["server_label"] for tool in tools}
         for provider, labels in PROVIDER_CONNECTORS.items():
@@ -209,14 +219,19 @@ class OAuthConnectorLoader:
             except CredentialStoreError:
                 sessions = []
             for session in sessions:
+                if session.provider in self._failed_sessions:
+                    continue
                 try:
                     authorization = self._manager.access_token(session.provider)
-                except CredentialStoreError:
+                except OAUTH_ACCESS_ERRORS as exc:
+                    self._quarantine_failed_session(session.provider, exc)
                     authorization = None
                 if not authorization:
                     continue
                 account = _account_from_session_key(provider, session.provider)
                 for label in _connector_labels_for_session(provider, labels, session.scopes):
+                    if label in disabled:
+                        continue
                     server_label = label if account is None else f"{label}_{account}"
                     if server_label in enabled_labels:
                         continue
@@ -230,9 +245,12 @@ class OAuthConnectorLoader:
                     )
                     enabled_labels.add(server_label)
         for provider, template in REMOTE_MCP_SPECS.items():
+            if provider in disabled or provider in self._failed_sessions:
+                continue
             try:
                 authorization = self._manager.access_token(provider)
-            except CredentialStoreError:
+            except OAUTH_ACCESS_ERRORS as exc:
+                self._quarantine_failed_session(provider, exc)
                 authorization = None
             if not authorization or provider in enabled_labels:
                 continue
@@ -240,6 +258,22 @@ class OAuthConnectorLoader:
             tool["authorization"] = authorization
             tools.append(tool)
         return tools
+
+    def _quarantine_failed_session(self, provider: str, error: Exception) -> None:
+        self._failed_sessions.add(provider)
+        LOGGER.warning(
+            "Skipping connector account %s for this run because OAuth refresh failed: %s",
+            provider,
+            error,
+        )
+
+
+def _disabled_connectors(environment: Mapping[str, str]) -> set[str]:
+    return {
+        label.strip().lower()
+        for label in environment.get("DESKBOB_DISABLED_CONNECTORS", "").split(",")
+        if label.strip()
+    }
 
 
 def _connector_tool(

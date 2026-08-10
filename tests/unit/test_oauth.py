@@ -151,3 +151,31 @@ def test_busy_fixed_callback_port_has_actionable_error(
 
     with pytest.raises(OAuthFlowError, match="port 53682"):
         LoopbackAuthorizationBrowser(port=53682)
+
+
+def test_callback_ignores_unrelated_request_before_oauth_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    browser: LoopbackAuthorizationBrowser
+
+    class FakeServer:
+        server_address = ("localhost", 54321)
+        timeout = 0.0
+
+        def __init__(self) -> None:
+            self.requests = 0
+
+        def handle_request(self) -> None:
+            self.requests += 1
+            if self.requests == 2:
+                browser._result.update(code="accepted", state="expected")  # noqa: SLF001
+
+        def server_close(self) -> None:
+            return
+
+    server = FakeServer()
+    monkeypatch.setattr(http_server, "ThreadingHTTPServer", lambda *_args: server)
+    browser = LoopbackAuthorizationBrowser(timeout_seconds=2, browser_open=lambda _url: True)
+
+    assert browser.authorize("https://example.test/?state=expected", "expected") == "accepted"
+    assert server.requests == 2

@@ -57,6 +57,19 @@ class FakeResponsesAPI:
         return FakeResponse()
 
 
+class MissingDropboxResponsesAPI(FakeResponsesAPI):
+    def __init__(self) -> None:
+        super().__init__()
+        self.calls = 0
+
+    async def create(self, **arguments: Any) -> FakeResponse:
+        self.calls += 1
+        self.arguments = arguments
+        if self.calls == 1:
+            raise RuntimeError("Connector with ID 'connector_dropbox' not found.")
+        return FakeResponse()
+
+
 def test_openai_client_preserves_function_calls_and_disables_parallel_tools() -> None:
     responses = FakeResponsesAPI()
     client = OpenAIModelClient(
@@ -121,6 +134,31 @@ def test_openai_client_adds_hosted_web_search_when_enabled() -> None:
     assert responses.arguments["tools"] == [{"type": "web_search", "search_context_size": "medium"}]
 
 
+def test_openai_client_skips_external_tool_loading_for_clear_local_conversation() -> None:
+    responses = FakeResponsesAPI()
+    connector_loads = 0
+
+    async def load_connectors() -> list[MCPConnectorTool]:
+        nonlocal connector_loads
+        connector_loads += 1
+        return []
+
+    client = OpenAIModelClient(
+        model="test-model",
+        reasoning_effort="none",
+        request_timeout_seconds=10,
+        maximum_output_tokens=250,
+        web_search_enabled=True,
+        connector_loader=load_connectors,
+        responses=responses,
+    )
+
+    asyncio.run(client.create_response([{"role": "user", "content": "Say hello."}], []))
+
+    assert connector_loads == 0
+    assert responses.arguments["tools"] == []
+
+
 def test_openai_client_adds_configured_connector_tools() -> None:
     responses = FakeResponsesAPI()
     connector = MCPConnectorTool(
@@ -144,6 +182,33 @@ def test_openai_client_adds_configured_connector_tools() -> None:
     asyncio.run(client.create_response([{"role": "user", "content": "Today?"}], []))
 
     assert responses.arguments["tools"] == [connector]
+
+
+def test_openai_client_quarantines_an_unavailable_connector_and_retries() -> None:
+    responses = MissingDropboxResponsesAPI()
+    dropbox = MCPConnectorTool(
+        type="mcp",
+        server_label="dropbox",
+        server_description="Read Dropbox.",
+        connector_id="connector_dropbox",
+        authorization="secret-token",
+        require_approval="never",
+        allowed_tools=["search"],
+    )
+    client = OpenAIModelClient(
+        model="test-model",
+        reasoning_effort="low",
+        request_timeout_seconds=10,
+        maximum_output_tokens=250,
+        connector_tools=[dropbox],
+        responses=responses,
+    )
+
+    asyncio.run(client.create_response([{"role": "user", "content": "Read Dropbox"}], []))
+    asyncio.run(client.create_response([{"role": "user", "content": "Read Dropbox again"}], []))
+
+    assert responses.calls == 3
+    assert responses.arguments["tools"] == []
 
 
 def test_openai_client_reloads_connector_tools_for_every_request() -> None:
@@ -176,7 +241,7 @@ def test_openai_client_reloads_connector_tools_for_every_request() -> None:
 
     asyncio.run(client.create_response([{"role": "user", "content": "Mail?"}], []))
     first_token = responses.arguments["tools"][0]["authorization"]
-    asyncio.run(client.create_response([{"role": "user", "content": "Again?"}], []))
+    asyncio.run(client.create_response([{"role": "user", "content": "Mail again?"}], []))
 
     assert calls == 2
     assert first_token == "token-1"

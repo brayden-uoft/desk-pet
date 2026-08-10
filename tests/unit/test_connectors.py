@@ -1,5 +1,8 @@
 import asyncio
+import logging
 from typing import cast
+
+import pytest
 
 from desk_pet.agent.connectors import (
     CONNECTOR_SPECS,
@@ -7,7 +10,7 @@ from desk_pet.agent.connectors import (
     connector_tools_from_environment,
 )
 from desk_pet.agent.tool_protocol import RemoteMCPTool
-from desk_pet.auth.http import OAuthHTTPClient
+from desk_pet.auth.http import OAuthHTTPClient, OAuthHTTPError
 from desk_pet.auth.models import OAuthSession
 from desk_pet.auth.oauth import OAuthManager
 from desk_pet.auth.store import MemoryCredentialStore
@@ -55,6 +58,20 @@ def test_oauth_loader_expands_one_google_login_into_three_connectors() -> None:
         "google_drive",
     ]
     assert all(tool["authorization"] == "google-token" for tool in tools)
+
+
+def test_oauth_loader_skips_explicitly_disabled_connector() -> None:
+    store = MemoryCredentialStore()
+    store.save(_session("google", "google-token"))
+    store.save(_session("dropbox", "dropbox-token"))
+    loader = OAuthConnectorLoader(
+        OAuthManager(store, _UnusedHTTP()),
+        {"DESKBOB_DISABLED_CONNECTORS": "dropbox, google_drive"},
+    )
+
+    tools = asyncio.run(loader())
+
+    assert [tool["server_label"] for tool in tools] == ["gmail", "google_calendar"]
 
 
 def test_oauth_loader_labels_multiple_google_accounts_separately() -> None:
@@ -166,6 +183,63 @@ def test_github_uses_server_enforced_read_only_endpoint() -> None:
     assert "allowed_tools" not in github
 
 
+def test_failed_remote_oauth_refresh_is_skipped_without_blocking_healthy_connectors() -> None:
+    store = MemoryCredentialStore()
+    store.save(_session("google", "google-token"))
+    store.save(
+        OAuthSession(
+            provider="notion",
+            client_id="client-id",
+            authorization_endpoint="https://mcp.notion.com/authorize",
+            token_endpoint="https://mcp.notion.com/token",
+            scopes=(),
+            access_token="expired-notion-token",
+            refresh_token="invalid-refresh-token",
+            expires_at=0,
+        )
+    )
+    http = _FailingRefreshHTTP()
+    loader = OAuthConnectorLoader(OAuthManager(store, http, clock=lambda: 1_000), {})
+
+    first_tools = loader.load()
+    second_tools = loader.load()
+
+    expected_labels = ["gmail", "google_calendar", "google_drive"]
+    assert [tool["server_label"] for tool in first_tools] == expected_labels
+    assert [tool["server_label"] for tool in second_tools] == expected_labels
+    assert http.refresh_attempts == 1
+
+
+def test_failed_remote_oauth_refresh_logs_account_without_tokens(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    store = MemoryCredentialStore()
+    store.save(
+        OAuthSession(
+            provider="notion",
+            client_id="client-id",
+            authorization_endpoint="https://mcp.notion.com/authorize",
+            token_endpoint="https://mcp.notion.com/token",
+            scopes=(),
+            access_token="expired-secret-access",
+            refresh_token="invalid-secret-refresh",
+            expires_at=0,
+        )
+    )
+    loader = OAuthConnectorLoader(
+        OAuthManager(store, _FailingRefreshHTTP(), clock=lambda: 1_000),
+        {},
+    )
+
+    with caplog.at_level(logging.WARNING):
+        assert loader.load() == []
+
+    message = "\n".join(caplog.messages)
+    assert "Skipping connector account notion" in message
+    assert "expired-secret-access" not in message
+    assert "invalid-secret-refresh" not in message
+
+
 def _session(
     provider: str,
     access_token: str,
@@ -193,3 +267,13 @@ class _UnusedHTTP(OAuthHTTPClient):
 
     def post_json(self, url: str, value: object) -> dict[str, object]:
         raise AssertionError((url, value))
+
+
+class _FailingRefreshHTTP(_UnusedHTTP):
+    def __init__(self) -> None:
+        self.refresh_attempts = 0
+
+    def post_form(self, url: str, values: object) -> dict[str, object]:
+        del values
+        self.refresh_attempts += 1
+        raise OAuthHTTPError(f"OAuth service returned HTTP 400 for {url}.")

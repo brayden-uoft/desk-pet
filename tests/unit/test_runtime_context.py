@@ -5,6 +5,7 @@ import pytest
 from desk_pet.memory.context import (
     ContextDocumentError,
     build_context_instructions,
+    build_realtime_context_instructions,
     load_runtime_context,
 )
 
@@ -47,6 +48,25 @@ def test_unapproved_profile_is_never_loaded(tmp_path: Path) -> None:
     )
 
     assert context.user_profile == ""
+
+
+def test_realtime_context_keeps_identity_but_drops_large_routine_sections() -> None:
+    from desk_pet.memory.context import RuntimeContext
+
+    context = RuntimeContext(
+        persona="DeskBob is chirpy.",
+        user_profile=(
+            "## Identity\n- Brayden is in ECE.\n\n"
+            "## Routine and support context\n- Private long-term detail.\n\n"
+            "## Work\n- Works on inference systems."
+        ),
+    )
+
+    instructions = build_realtime_context_instructions(context)
+
+    assert "Brayden is in ECE" in instructions
+    assert "Works on inference systems" in instructions
+    assert "Private long-term detail" not in instructions
 
 
 def test_missing_optional_profile_does_not_block_startup(tmp_path: Path) -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Any, Protocol, cast
 
 from openai import AsyncOpenAI
@@ -30,6 +31,9 @@ class _SpeechAPI(Protocol):
         speed: float,
     ) -> _SpeechResponse: ...
 
+    @property
+    def with_streaming_response(self) -> Any: ...
+
 
 class OpenAITranscriptionService:
     def __init__(
@@ -37,11 +41,12 @@ class OpenAITranscriptionService:
         *,
         model: str,
         request_timeout_seconds: float,
+        sdk: AsyncOpenAI | None = None,
         transcriptions: _TranscriptionsAPI | None = None,
     ) -> None:
         if transcriptions is None:
-            sdk = AsyncOpenAI(timeout=request_timeout_seconds, max_retries=1)
-            transcriptions = cast(_TranscriptionsAPI, sdk.audio.transcriptions)
+            client = sdk or AsyncOpenAI(timeout=request_timeout_seconds, max_retries=1)
+            transcriptions = cast(_TranscriptionsAPI, client.audio.transcriptions)
         self._transcriptions = transcriptions
         self._model = model
 
@@ -64,11 +69,12 @@ class OpenAISpeechSynthesizer:
         voice: str,
         speed: float,
         request_timeout_seconds: float,
+        sdk: AsyncOpenAI | None = None,
         speech: _SpeechAPI | None = None,
     ) -> None:
         if speech is None:
-            sdk = AsyncOpenAI(timeout=request_timeout_seconds, max_retries=1)
-            speech = cast(_SpeechAPI, sdk.audio.speech)
+            client = sdk or AsyncOpenAI(timeout=request_timeout_seconds, max_retries=1)
+            speech = cast(_SpeechAPI, client.audio.speech)
         self._speech = speech
         self._model = model
         self._voice = voice
@@ -86,3 +92,18 @@ class OpenAISpeechSynthesizer:
             return await response.aread()
         except Exception as exc:
             raise AudioError("I couldn't generate speech for that response.") from exc
+
+    async def synthesize_pcm_stream(self, text: str) -> AsyncIterator[bytes]:
+        try:
+            async with self._speech.with_streaming_response.create(
+                model=self._model,
+                voice=self._voice,
+                input=text,
+                response_format="pcm",
+                speed=self._speed,
+            ) as response:
+                async for chunk in response.iter_bytes(chunk_size=4_800):
+                    if chunk:
+                        yield chunk
+        except Exception as exc:
+            raise AudioError("I couldn't stream speech for that response.") from exc

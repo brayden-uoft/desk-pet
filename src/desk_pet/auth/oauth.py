@@ -60,7 +60,10 @@ class LoopbackAuthorizationBrowser:
                 raise OAuthFlowError(
                     f"The sign-in page could not be opened. Open this URL manually: {url}"
                 )
-            self._server.handle_request()
+            deadline = time.monotonic() + self._timeout_seconds
+            while not self._result and time.monotonic() < deadline:
+                self._server.timeout = min(1.0, max(0.0, deadline - time.monotonic()))
+                self._server.handle_request()
         finally:
             self._server.server_close()
         if not self._result:
